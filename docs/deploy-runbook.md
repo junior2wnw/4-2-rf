@@ -49,6 +49,7 @@ node scripts/compose-stack.mjs up -d --build
 
 Если DNS ещё не указывает на сервер, можно временно оставить `SITE_ADDRESS=:80`.
 После прокидывания A-record поменяй `SITE_ADDRESS=4-2.рф` и перезапусти stack, чтобы Caddy получил публичный TLS.
+Если `80/443` уже заняты на shared-host, временно выставь high ports через `SITE_HTTP_PORT` и `SITE_HTTPS_PORT`, а публичные URL в `.env` укажи с этими портами.
 
 `compose-stack.mjs` запускает `docker compose` из каталога `deploy/` и всегда подхватывает корневой `.env`, поэтому interpolation и секреты не теряются.
 
