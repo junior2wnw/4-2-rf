@@ -43,7 +43,7 @@ cd /opt/4-2-rf
 cp .env.example .env
 # заполни секреты
 node scripts/compose-stack.mjs config
-node scripts/compose-stack.mjs --profile build run --rm agent-builder
+node scripts/compose-stack.mjs --profile build run --build --rm agent-builder
 node scripts/compose-stack.mjs up -d --build
 ```
 
@@ -70,7 +70,7 @@ curl -s http://127.0.0.1/api/readyz
 ```bash
 cd /opt/4-2-rf
 git pull --ff-only
-node scripts/compose-stack.mjs --profile build run --rm agent-builder
+node scripts/compose-stack.mjs --profile build run --build --rm agent-builder
 node scripts/compose-stack.mjs up -d --build
 ```
 
