@@ -1,4 +1,4 @@
-{$SITE_ADDRESS:80} {
+{$SITE_ADDRESS:http://} {
   encode zstd gzip
 
   header {

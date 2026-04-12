@@ -46,7 +46,7 @@ node scripts/compose-stack.mjs config
 node scripts/deploy-stack.mjs
 ```
 
-Если DNS ещё не указывает на сервер, держи `SITE_ADDRESS=http://:80`, чтобы preview работал по обычному HTTP и Caddy не пытался получить TLS-сертификат на невалидный host.
+Если DNS ещё не указывает на сервер, держи `SITE_ADDRESS=http://`, чтобы preview работал по обычному HTTP и Caddy не пытался получить TLS-сертификат на невалидный host.
 После прокидывания A-record поменяй `SITE_ADDRESS=4-2.рф` и перезапусти stack, чтобы Caddy получил публичный TLS.
 Если `80/443` уже заняты на shared-host, временно выставь high ports через `SITE_HTTP_PORT` и `SITE_HTTPS_PORT`, а публичные URL в `.env` укажи с этими портами.
 
