@@ -23,7 +23,11 @@ async function main(): Promise<void> {
   const metrics = new MetricsService();
   const repository = new Repository(pool);
   const memory = new MemoryService(env.MEMORY_SIDECAR_URL, env.MEMORY_SIDECAR_API_KEY);
-  const downloads = new DownloadService(env.AGENT_ARTIFACTS_DIR, env.INSTALLER_BASE_URL);
+  const downloads = new DownloadService(
+    env.AGENT_ARTIFACTS_DIR,
+    env.INSTALLER_BASE_URL,
+    env.API_PUBLIC_BASE_URL,
+  );
   const chat = new ChatService(env, metrics);
   const knowledge = new KnowledgeService(repository, metrics);
 

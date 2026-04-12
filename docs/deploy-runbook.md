@@ -21,7 +21,7 @@
 ## Обязательные env values
 
 - `NEXT_PUBLIC_SITE_URL=https://4-2.рф`
-- `NEXT_PUBLIC_API_BASE_URL=https://4-2.рф/api`
+- `NEXT_PUBLIC_API_BASE_URL=/api`
 - `API_PUBLIC_BASE_URL=https://4-2.рф/api`
 - `WEB_PUBLIC_BASE_URL=https://4-2.рф`
 - `INTERNAL_API_BASE_URL=http://api:8080`
@@ -42,17 +42,23 @@ git clone <repo-url> /opt/4-2-rf
 cd /opt/4-2-rf
 cp .env.example .env
 # заполни секреты
-docker compose -f deploy/compose.dev.yml --profile build run --rm agent-builder
-docker compose -f deploy/compose.dev.yml up -d --build
+node scripts/compose-stack.mjs config
+node scripts/compose-stack.mjs --profile build run --rm agent-builder
+node scripts/compose-stack.mjs up -d --build
 ```
+
+Если DNS ещё не указывает на сервер, можно временно оставить `SITE_ADDRESS=:80`.
+После прокидывания A-record поменяй `SITE_ADDRESS=4-2.рф` и перезапусти stack, чтобы Caddy получил публичный TLS.
+
+`compose-stack.mjs` запускает `docker compose` из каталога `deploy/` и всегда подхватывает корневой `.env`, поэтому interpolation и секреты не теряются.
 
 ## Проверка
 
 ```bash
-docker compose -f deploy/compose.dev.yml ps
-docker compose -f deploy/compose.dev.yml logs api --tail=100
-docker compose -f deploy/compose.dev.yml logs web --tail=100
-docker compose -f deploy/compose.dev.yml logs memory-sidecar --tail=100
+node scripts/compose-stack.mjs ps
+node scripts/compose-stack.mjs logs api --tail=100
+node scripts/compose-stack.mjs logs web --tail=100
+node scripts/compose-stack.mjs logs memory-sidecar --tail=100
 curl -I http://127.0.0.1
 curl -s http://127.0.0.1/api/healthz
 curl -s http://127.0.0.1/api/readyz
@@ -63,8 +69,8 @@ curl -s http://127.0.0.1/api/readyz
 ```bash
 cd /opt/4-2-rf
 git pull --ff-only
-docker compose -f deploy/compose.dev.yml --profile build run --rm agent-builder
-docker compose -f deploy/compose.dev.yml up -d --build
+node scripts/compose-stack.mjs --profile build run --rm agent-builder
+node scripts/compose-stack.mjs up -d --build
 ```
 
 ## Rollback
@@ -74,7 +80,7 @@ docker compose -f deploy/compose.dev.yml up -d --build
 ```bash
 git log --oneline -n 10
 git checkout <previous-good-commit>
-docker compose -f deploy/compose.dev.yml up -d --build
+node scripts/compose-stack.mjs up -d --build
 ```
 
 ### Вариант 2: откат только приложения

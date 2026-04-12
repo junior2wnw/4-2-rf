@@ -9,8 +9,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AGENT_ROOT="$REPO_ROOT/apps/agent"
 DIST_ROOT="$AGENT_ROOT/dist"
 
-rm -rf "$DIST_ROOT"
 mkdir -p "$DIST_ROOT"
+find "$DIST_ROOT" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
 TARGETS=(
   "windows windows amd64 zip"

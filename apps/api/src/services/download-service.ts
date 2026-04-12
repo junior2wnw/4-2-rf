@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 import type { DownloadManifest } from "@4-2/contracts";
 
@@ -8,6 +8,7 @@ export class DownloadService {
   public constructor(
     private readonly artifactsDir: string,
     private readonly installerBaseUrl: string,
+    private readonly apiBaseUrl: string,
   ) {}
 
   public async loadManifest(): Promise<DownloadManifest> {
@@ -22,8 +23,11 @@ export class DownloadService {
   }
 
   public async readArtifact(filename: string): Promise<{ content: Buffer; contentType: string } | null> {
-    const absolute = resolve(this.artifactsDir, filename);
-    if (!absolute.startsWith(resolve(this.artifactsDir))) {
+    const root = resolve(this.artifactsDir);
+    const absolute = resolve(root, filename);
+    const relativePath = relative(root, absolute);
+
+    if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
       return null;
     }
 
@@ -46,12 +50,12 @@ export class DownloadService {
   private buildFallbackManifest(): DownloadManifest {
     const generatedAt = new Date().toISOString();
     const items = [
-      buildManifestItem(this.installerBaseUrl, "windows", "amd64", "zip"),
-      buildManifestItem(this.installerBaseUrl, "windows", "arm64", "zip"),
-      buildManifestItem(this.installerBaseUrl, "linux", "amd64", "tar.gz"),
-      buildManifestItem(this.installerBaseUrl, "linux", "arm64", "tar.gz"),
-      buildManifestItem(this.installerBaseUrl, "macos", "amd64", "tar.gz"),
-      buildManifestItem(this.installerBaseUrl, "macos", "arm64", "tar.gz"),
+      buildManifestItem(this.installerBaseUrl, this.apiBaseUrl, "windows", "amd64", "zip"),
+      buildManifestItem(this.installerBaseUrl, this.apiBaseUrl, "windows", "arm64", "zip"),
+      buildManifestItem(this.installerBaseUrl, this.apiBaseUrl, "linux", "amd64", "tar.gz"),
+      buildManifestItem(this.installerBaseUrl, this.apiBaseUrl, "linux", "arm64", "tar.gz"),
+      buildManifestItem(this.installerBaseUrl, this.apiBaseUrl, "macos", "amd64", "tar.gz"),
+      buildManifestItem(this.installerBaseUrl, this.apiBaseUrl, "macos", "arm64", "tar.gz"),
     ];
 
     return { generatedAt, items };
@@ -60,11 +64,14 @@ export class DownloadService {
 
 function buildManifestItem(
   installerBaseUrl: string,
+  apiBaseUrl: string,
   platform: "windows" | "macos" | "linux",
   arch: "amd64" | "arm64",
   archiveType: "zip" | "tar.gz",
 ) {
   const filename = `4-2-agent-${platform}-${arch}.${archiveType}`;
+  const normalizedInstallerBaseUrl = trimTrailingSlash(installerBaseUrl);
+  const normalizedApiBaseUrl = trimTrailingSlash(apiBaseUrl);
 
   return {
     platform,
@@ -72,10 +79,10 @@ function buildManifestItem(
     filename,
     installCommand:
       platform === "windows"
-        ? `Expand-Archive .\\${filename} -DestinationPath $env:LOCALAPPDATA\\4-2; & $env:LOCALAPPDATA\\4-2\\4-2-agent.exe install --api-url https://4-2.рф/api --scope user --enrollment-token <token-from-site>`
-        : `tar -xzf ./${filename} && ./4-2-agent install --api-url https://4-2.рф/api --scope user --enrollment-token <token-from-site>`,
+        ? `Expand-Archive .\\${filename} -DestinationPath $env:LOCALAPPDATA\\4-2; & $env:LOCALAPPDATA\\4-2\\4-2-agent.exe install --api-url ${normalizedApiBaseUrl} --scope user --enrollment-token <token-from-site>`
+        : `tar -xzf ./${filename} && ./4-2-agent install --api-url ${normalizedApiBaseUrl} --scope user --enrollment-token <token-from-site>`,
     sha256: sha256Hex(`fallback-${platform}-${arch}`),
-    url: `${installerBaseUrl}/${filename}`,
+    url: `${normalizedInstallerBaseUrl}/${filename}`,
     notes: buildNotes(platform),
   };
 }
@@ -102,4 +109,8 @@ function buildNotes(platform: "windows" | "macos" | "linux"): string[] {
 
 function sha256Hex(input: string): string {
   return createHash("sha256").update(input).digest("hex");
+}
+
+function trimTrailingSlash(input: string): string {
+  return input.endsWith("/") ? input.slice(0, -1) : input;
 }
