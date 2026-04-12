@@ -35,9 +35,11 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         })
       : null;
 
-    app.services.metrics.markMemoryLookup(
-      memory?.results.length ? "hit" : body.enableMemory ? "miss" : "error",
-    );
+    if (body.enableMemory) {
+      app.services.metrics.markMemoryLookup(
+        memory === null ? "error" : memory.results.length ? "hit" : "miss",
+      );
+    }
 
     await app.services.repository.saveMessage({
       sessionId: params.sessionId,

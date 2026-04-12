@@ -4,13 +4,17 @@ export class MemoryService {
   public constructor(
     private readonly baseUrl: string,
     private readonly apiKey: string,
+    private readonly timeoutMs = 2500,
   ) {}
 
   public async healthcheck(): Promise<boolean> {
     try {
-      const response = await fetch(new URL("/healthz", this.baseUrl), {
-        headers: this.buildHeaders(),
-      });
+      const response = await fetch(
+        new URL("/healthz", this.baseUrl),
+        this.withSignal({
+          headers: this.buildHeaders(),
+        }),
+      );
 
       return response.ok;
     } catch {
@@ -24,11 +28,14 @@ export class MemoryService {
     wing?: string;
   }): Promise<MemorySearchResponse | null> {
     try {
-      const response = await fetch(new URL("/v1/search", this.baseUrl), {
-        method: "POST",
-        headers: this.buildHeaders(true),
-        body: JSON.stringify(input),
-      });
+      const response = await fetch(
+        new URL("/v1/search", this.baseUrl),
+        this.withSignal({
+          method: "POST",
+          headers: this.buildHeaders(true),
+          body: JSON.stringify(input),
+        }),
+      );
 
       if (!response.ok) {
         return null;
@@ -58,6 +65,10 @@ export class MemoryService {
       }),
     ]);
 
+    if (!privateResult && !sharedResult) {
+      return null;
+    }
+
     const merged = [...(privateResult?.results ?? []), ...(sharedResult?.results ?? [])]
       .sort((left, right) => right.similarity - left.similarity)
       .slice(0, input.limit);
@@ -75,16 +86,19 @@ export class MemoryService {
     sourceFile: string;
   }): Promise<{ id: string; stored: boolean } | null> {
     try {
-      const response = await fetch(new URL("/v1/drawers", this.baseUrl), {
-        method: "POST",
-        headers: this.buildHeaders(true),
-        body: JSON.stringify({
-          text: input.text,
-          wing: input.wing,
-          room: input.room,
-          source_file: input.sourceFile,
+      const response = await fetch(
+        new URL("/v1/drawers", this.baseUrl),
+        this.withSignal({
+          method: "POST",
+          headers: this.buildHeaders(true),
+          body: JSON.stringify({
+            text: input.text,
+            wing: input.wing,
+            room: input.room,
+            source_file: input.sourceFile,
+          }),
         }),
-      });
+      );
 
       if (!response.ok) {
         return null;
@@ -102,5 +116,14 @@ export class MemoryService {
       "x-memory-sidecar-key": this.apiKey,
       ...(includeContentType ? { "content-type": "application/json" } : {}),
     };
+  }
+
+  private buildSignal(): AbortSignal | undefined {
+    return this.timeoutMs > 0 ? AbortSignal.timeout(this.timeoutMs) : undefined;
+  }
+
+  private withSignal(init: RequestInit): RequestInit {
+    const signal = this.buildSignal();
+    return signal ? { ...init, signal } : init;
   }
 }

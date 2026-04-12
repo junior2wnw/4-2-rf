@@ -16,6 +16,7 @@ describe("parseEnv", () => {
     expect(env.OPENAI_MODEL).toBe("gpt-5");
     expect(env.OPENAI_TIMEOUT_MS).toBe(60000);
     expect(env.MEMORY_SIDECAR_API_KEY).toBe("local-memory-sidecar-key");
+    expect(env.MEMORY_SIDECAR_TIMEOUT_MS).toBe(2500);
     expect(env.KNOWLEDGE_ADMIN_API_KEY).toBe("local-admin-api-key");
   });
 });

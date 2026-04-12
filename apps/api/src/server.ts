@@ -22,7 +22,11 @@ async function main(): Promise<void> {
 
   const metrics = new MetricsService();
   const repository = new Repository(pool);
-  const memory = new MemoryService(env.MEMORY_SIDECAR_URL, env.MEMORY_SIDECAR_API_KEY);
+  const memory = new MemoryService(
+    env.MEMORY_SIDECAR_URL,
+    env.MEMORY_SIDECAR_API_KEY,
+    env.MEMORY_SIDECAR_TIMEOUT_MS,
+  );
   const downloads = new DownloadService(
     env.AGENT_ARTIFACTS_DIR,
     env.INSTALLER_BASE_URL,

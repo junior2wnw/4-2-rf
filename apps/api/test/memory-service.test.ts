@@ -87,4 +87,21 @@ describe("MemoryService", () => {
       }),
     );
   });
+
+  it("returns null when both lookup scopes are unavailable", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new MemoryService("http://memory.internal", "memory-key-1234567890");
+    const result = await service.searchForScope({
+      query: "deploy postgres",
+      scope: "session-1",
+      limit: 5,
+    });
+
+    expect(result).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

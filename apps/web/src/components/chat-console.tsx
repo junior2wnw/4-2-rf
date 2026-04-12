@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { ChatMessage, ChatSession } from "@4-2/contracts";
 
 import { absoluteApi } from "@/lib/api";
 
 type UiMessage = ChatMessage & { pending?: boolean };
+type RuntimeMode = "checking" | "live" | "demo" | "degraded";
 
 const starterPrompts = [
   "Разложи мою идею на продуктовую воронку, найди точки роста и предложи сильный repositioning.",
@@ -20,9 +21,38 @@ export function ChatConsole() {
   const [prompt, setPrompt] = useState<string>(starterPrompts[0] ?? "");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("checking");
 
   const canSend = prompt.trim().length > 0 && !streaming;
   const emptyState = messages.length === 0;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHealth() {
+      try {
+        const response = await fetch(absoluteApi("/healthz"));
+        if (!response.ok) {
+          throw new Error("health check failed");
+        }
+
+        const payload = (await response.json()) as { liveModel?: boolean };
+        if (!cancelled) {
+          setRuntimeMode(payload.liveModel ? "live" : "demo");
+        }
+      } catch {
+        if (!cancelled) {
+          setRuntimeMode("degraded");
+        }
+      }
+    }
+
+    void loadHealth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function ensureSession(): Promise<ChatSession> {
     if (session) {
@@ -197,7 +227,7 @@ export function ChatConsole() {
           </h2>
         </div>
         <div className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
-          {streaming ? "streaming" : "ready"}
+          {streaming ? "streaming" : runtimeMode}
         </div>
       </div>
 
@@ -269,6 +299,19 @@ export function ChatConsole() {
             {streaming ? "Генерация..." : "Запустить"}
           </button>
         </div>
+
+        {runtimeMode === "demo" ? (
+          <div className="rounded-[1rem] border border-[#ffd26a33] bg-[#ffd26a12] px-4 py-3 text-sm text-[#ffe3a7]">
+            Сейчас включён demo-режим: веб-контур и память доступны, а live-модель появится после
+            подключения рабочего `OPENAI_API_KEY`.
+          </div>
+        ) : null}
+
+        {runtimeMode === "degraded" ? (
+          <div className="rounded-[1rem] border border-[#ff8d6a55] bg-[#ff8d6a12] px-4 py-3 text-sm text-[#ffc3b0]">
+            Статус модели сейчас не подтвердился, но сам чатовый контур остаётся доступным.
+          </div>
+        ) : null}
 
         {error ? (
           <div className="rounded-[1rem] border border-[#ff8d6a55] bg-[#ff8d6a12] px-4 py-3 text-sm text-[#ffc3b0]">

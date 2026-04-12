@@ -17,6 +17,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().trim().min(1).default("postgres://fourtwo:fourtwo@localhost:5432/fourtwo"),
   MEMORY_SIDECAR_URL: z.url().default("http://localhost:8090"),
   MEMORY_SIDECAR_API_KEY: z.string().trim().min(16).default("local-memory-sidecar-key"),
+  MEMORY_SIDECAR_TIMEOUT_MS: z.coerce.number().int().min(250).max(30_000).default(2500),
   AGENT_ENROLLMENT_SECRET: z.string().trim().min(16).default("local-dev-secret-rotate-me"),
   AGENT_ARTIFACTS_DIR: z.string().trim().default(resolve(process.cwd(), "../agent/dist")),
   INSTALLER_BASE_URL: z.url().default("http://localhost:8080/v1/installers"),

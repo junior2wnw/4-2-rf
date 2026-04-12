@@ -27,6 +27,7 @@ services:
       MEMORY_SIDECAR_API_KEY: ${MEMORY_SIDECAR_API_KEY}
     volumes:
       - memory_data:/data/palace
+      - memory_cache:/root/.cache/chroma
     healthcheck:
       test:
         [
@@ -72,6 +73,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-fourtwo}:${POSTGRES_PASSWORD:-fourtwo}@postgres:5432/${POSTGRES_DB:-fourtwo}}
       MEMORY_SIDECAR_URL: http://memory-sidecar:8090
       MEMORY_SIDECAR_API_KEY: ${MEMORY_SIDECAR_API_KEY}
+      MEMORY_SIDECAR_TIMEOUT_MS: ${MEMORY_SIDECAR_TIMEOUT_MS:-2500}
       AGENT_ENROLLMENT_SECRET: ${AGENT_ENROLLMENT_SECRET}
       AGENT_ARTIFACTS_DIR: /artifacts
       INSTALLER_BASE_URL: ${INSTALLER_BASE_URL:-https://4-2.рф/api/v1/installers}
@@ -158,6 +160,7 @@ services:
 volumes:
   postgres_data:
   memory_data:
+  memory_cache:
   agent_artifacts:
   caddy_data:
   caddy_config:
