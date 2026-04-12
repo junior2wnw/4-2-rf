@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { LinkedAgent } from "@4-2/contracts";
 
 import type { AppEnv } from "../config/env.js";
+import { classifyOpenAiRuntimeIssue } from "../lib/openai-runtime.js";
 import type { MetricsService } from "./metrics-service.js";
 
 type MemoryContext = {
@@ -237,14 +238,15 @@ export class ExecutionPlannerService {
       });
       this.runtimeCache = { status: "live", checkedAt: Date.now() };
       return "live";
-    } catch {
+    } catch (error) {
       this.metrics.observeOpenAi({
         mode: "probe",
         status: "error",
         durationMs: performance.now() - startedAt,
       });
-      this.runtimeCache = { status: "degraded", checkedAt: Date.now() };
-      return "degraded";
+      const status = classifyOpenAiRuntimeIssue(error) === "configuration" ? "demo" : "degraded";
+      this.runtimeCache = { status, checkedAt: Date.now() };
+      return status;
     }
   }
 }

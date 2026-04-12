@@ -95,6 +95,26 @@ describe("ExecutionPlannerService", () => {
       expect(result.plan.assistantText).toContain("Refusing");
     }
   });
+
+  it("treats invalid provider credentials as demo runtime instead of degraded", async () => {
+    const service = new ExecutionPlannerService(
+      env,
+      metrics as never,
+      {
+        responses: {
+          parse: vi.fn(),
+          create: vi.fn().mockRejectedValue({
+            status: 401,
+            code: "invalid_api_key",
+            type: "invalid_request_error",
+            message: "Incorrect API key provided.",
+          }),
+        },
+      } as never,
+    );
+
+    await expect(service.getRuntimeStatus()).resolves.toBe("demo");
+  });
 });
 
 function connectedAgent(platform: LinkedAgent["platform"]): LinkedAgent {

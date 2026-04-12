@@ -41,6 +41,7 @@ export function ChatConsole() {
   const canSend = prompt.trim().length > 0 && !streaming;
   const emptyState = messages.length === 0;
   const connectedAgent = linkedAgents.find((agent) => agent.isConnected) ?? null;
+  const runtimeLabel = runtimeMode === "demo" ? "demo fallback" : runtimeMode;
 
   useEffect(() => {
     let cancelled = false;
@@ -365,7 +366,7 @@ export function ChatConsole() {
           </h2>
         </div>
         <div className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
-          {streaming ? "streaming" : runtimeMode}
+          {streaming ? "streaming" : runtimeLabel}
         </div>
       </div>
 

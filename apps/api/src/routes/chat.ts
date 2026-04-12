@@ -130,6 +130,21 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         return;
       }
 
+      const plannerStatus = await app.services.planner.getRuntimeStatus();
+      if (plannerStatus !== "live") {
+        await streamModelAnswer({
+          app,
+          reply,
+          request,
+          sessionId: params.sessionId,
+          prompt: body.content,
+          previousResponseId: session.previousResponseId,
+          sessionDisplayName: session.displayName,
+          memory,
+        });
+        return;
+      }
+
       const planned = await app.services.planner.planTurn({
         prompt: body.content,
         previousResponseId: session.previousResponseId,

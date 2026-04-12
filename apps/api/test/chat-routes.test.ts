@@ -91,9 +91,72 @@ describe("chat routes", () => {
 
     await app.close();
   });
+
+  it("falls back to the chat stream when live planning is unavailable", async () => {
+    const planTurn = vi.fn();
+    const streamResponse = vi.fn().mockImplementation(async function* () {
+      yield { type: "delta", delta: "Demo " };
+      yield {
+        type: "completed",
+        outputText: "Demo fallback answer",
+        responseId: "demo_1",
+      };
+    });
+
+    const app = await buildTestApp({
+      chat: {
+        streamResponse,
+      },
+      planner: {
+        isConfigured: vi.fn().mockReturnValue(true),
+        getRuntimeStatus: vi.fn().mockResolvedValue("demo"),
+        planTurn,
+      },
+      repository: {
+        saveMessage: vi
+          .fn()
+          .mockResolvedValueOnce({
+            id: "00000000-0000-0000-0000-000000000010",
+            role: "user",
+            content: "Say hello",
+            createdAt: new Date().toISOString(),
+          })
+          .mockResolvedValueOnce({
+            id: "00000000-0000-0000-0000-000000000011",
+            role: "assistant",
+            content: "Demo fallback answer",
+            createdAt: new Date().toISOString(),
+          }),
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/sessions/00000000-0000-0000-0000-000000000001/messages",
+      headers: {
+        "content-type": "application/json",
+        "x-session-token": "session-token-123",
+      },
+      payload: {
+        clientMessageId: "client-msg-0002",
+        content: "Say hello",
+        enableMemory: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("event: delta");
+    expect(response.body).toContain("event: complete");
+    expect(response.body).not.toContain("event: task_queued");
+    expect(planTurn).not.toHaveBeenCalled();
+    expect(streamResponse).toHaveBeenCalledOnce();
+
+    await app.close();
+  });
 });
 
 async function buildTestApp(overrides?: {
+  chat?: Record<string, unknown>;
   planner?: Record<string, unknown>;
   repository?: Record<string, unknown>;
 }) {
@@ -143,7 +206,14 @@ async function buildTestApp(overrides?: {
     services: {
       chat: {
         isLiveModelEnabled: vi.fn().mockReturnValue(false),
-        streamResponse: vi.fn(),
+        streamResponse: vi.fn().mockImplementation(async function* () {
+          yield {
+            type: "completed",
+            outputText: "Default response",
+            responseId: "default_resp_1",
+          };
+        }),
+        ...overrides?.chat,
       } as never,
       downloads: {
         loadManifest: vi.fn(),

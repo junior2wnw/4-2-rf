@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 
 import type { AppEnv } from "../config/env.js";
+import { classifyOpenAiRuntimeIssue } from "../lib/openai-runtime.js";
 import { extractResponseId, extractResponseText } from "../lib/response-utils.js";
 import type { MetricsService } from "./metrics-service.js";
 
@@ -133,6 +134,12 @@ export class ChatService {
         status: "error",
         durationMs: performance.now() - startedAt,
       });
+
+      if (classifyOpenAiRuntimeIssue(error) !== "unknown") {
+        yield* this.streamMockResponse(input.prompt, input.memoryContext);
+        return;
+      }
+
       throw error;
     }
   }
@@ -142,12 +149,13 @@ export class ChatService {
     memoryContext: MemoryContext,
   ): AsyncGenerator<ChatStreamEvent> {
     const startedAt = performance.now();
-    const headline = "Демо-режим активен: backend работает, но `OPENAI_API_KEY` не задан.";
+    const headline =
+      "Безопасный fallback активен: live-модель сейчас недоступна, поэтому я отвечаю из demo-контура.";
     const memoryNote =
       memoryContext && memoryContext.results.length
-        ? ` Нашёл ${memoryContext.results.length} совпадений в памяти и учёл их в ответе.`
+        ? ` Я нашёл ${memoryContext.results.length} релевантных совпадений в памяти и учёл их в ответе.`
         : " Память сейчас не дала релевантных совпадений.";
-    const outputText = `${headline}${memoryNote} Запрос: "${prompt}". Для production-поведения добавь ключ OpenAI и перезапусти API.`;
+    const outputText = `${headline}${memoryNote} Запрос: "${prompt}". Когда live-провайдер станет доступен, сайт снова сможет давать полноценные live-ответы и планировать локальные исполнения автоматически.`;
 
     for (const chunk of chunkText(outputText, 42)) {
       yield { type: "delta", delta: chunk };
@@ -169,7 +177,7 @@ export class ChatService {
 
 function buildInstructions(sessionDisplayName: string, memoryContext: MemoryContext): string {
   const sections = [
-    "You are the 4-2.рф orchestration assistant.",
+    "You are the 4-2 orchestration assistant.",
     "Be concise, decisive, and operationally useful.",
     "Favor concrete next actions over abstract discussion.",
     `Current session label: ${sessionDisplayName}.`,
