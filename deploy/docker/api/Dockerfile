@@ -1,10 +1,18 @@
+# syntax=docker/dockerfile:1.7
+
 FROM node:24-bookworm-slim AS builder
 
 ENV PNPM_HOME="/pnpm"
+ENV PNPM_STORE_DIR="/pnpm/store"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN corepack enable
+RUN corepack enable \
+  && pnpm config set store-dir "$PNPM_STORE_DIR" \
+  && pnpm config set fetch-retries 5 \
+  && pnpm config set fetch-retry-mintimeout 10000 \
+  && pnpm config set fetch-retry-maxtimeout 120000 \
+  && pnpm config set fetch-timeout 600000
 
 WORKDIR /workspace
 
@@ -15,7 +23,7 @@ COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
 COPY apps/api/src ./apps/api/src
 COPY apps/api/test ./apps/api/test
 
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=four-two-pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm --filter @4-2/contracts build
 RUN pnpm --filter @4-2/api build
 
