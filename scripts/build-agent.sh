@@ -56,7 +56,7 @@ for target in "${TARGETS[@]}"; do
   sha256="$(sha256sum "$archive_path" | awk '{print $1}')"
   if [[ "$platform" == "windows" ]]; then
     install_command="\$installRoot = Join-Path \$env:LOCALAPPDATA '4-2'; Expand-Archive -LiteralPath ./$archive_name -DestinationPath \$installRoot -Force; & (Join-Path \$installRoot '4-2-agent.exe') install --api-url $API_URL --scope user --enrollment-token <token-from-site>"
-    notes='["Default install scope is user, not system.","Elevation is a separate explicit step and is never requested silently.","Uses Task Scheduler for persistence in a Windows-native way."]'
+    notes='["Default install scope is user, not system.","Elevation is a separate explicit step and is never requested silently.","Uses Startup-folder autostart for user installs and Task Scheduler only for explicit system scope."]'
   elif [[ "$platform" == "macos" ]]; then
     install_command="tar -xzf ./$archive_name && ./4-2-agent install --api-url $API_URL --scope user --enrollment-token <token-from-site>"
     notes='["Default install scope is user, not system.","Elevation is a separate explicit step and is never requested silently.","Uses launchd with LaunchAgent by default; LaunchDaemon only on explicit elevated install."]'

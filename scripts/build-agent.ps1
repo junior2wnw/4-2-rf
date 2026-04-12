@@ -72,7 +72,7 @@ foreach ($target in $targets) {
   }
 
   $notes = switch ($target.Platform) {
-    "windows" { @("Default install scope is user, not system.", "Elevation is a separate explicit step and is never requested silently.", "Uses Task Scheduler for persistence in a Windows-native way.") }
+    "windows" { @("Default install scope is user, not system.", "Elevation is a separate explicit step and is never requested silently.", "Uses Startup-folder autostart for user installs and Task Scheduler only for explicit system scope.") }
     "macos" { @("Default install scope is user, not system.", "Elevation is a separate explicit step and is never requested silently.", "Uses launchd with LaunchAgent by default; LaunchDaemon only on explicit elevated install.") }
     default { @("Default install scope is user, not system.", "Elevation is a separate explicit step and is never requested silently.", "Uses systemd user services by default; system-wide mode requires explicit sudo.") }
   }

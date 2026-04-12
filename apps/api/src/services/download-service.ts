@@ -94,7 +94,10 @@ function buildNotes(platform: "windows" | "macos" | "linux"): string[] {
   ];
 
   if (platform === "windows") {
-    return [...base, "Uses Task Scheduler for persistence in a Windows-native way."];
+    return [
+      ...base,
+      "Uses Startup-folder autostart for user installs and Task Scheduler only for explicit system scope.",
+    ];
   }
 
   if (platform === "macos") {

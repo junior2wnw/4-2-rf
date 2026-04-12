@@ -1,6 +1,7 @@
 package install
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -91,17 +92,26 @@ func installService(binaryPath string, configPath string, scope string) error {
 
 	switch runtime.GOOS {
 	case "windows":
-		taskName := "FourTwoAgent"
-		args := []string{"/Create", "/F", "/TN", taskName, "/TR", commandLine}
 		if scope == "system" {
-			args = append(args, "/SC", "ONSTART", "/RU", "SYSTEM", "/RL", "HIGHEST")
-		} else {
-			args = append(args, "/SC", "ONLOGON")
+			taskName := "FourTwoAgent"
+			args := []string{"/Create", "/F", "/TN", taskName, "/TR", commandLine, "/SC", "ONSTART", "/RU", "SYSTEM", "/RL", "HIGHEST"}
+			if err := run("schtasks", args...); err != nil {
+				return err
+			}
+			return run("schtasks", "/Run", "/TN", taskName)
 		}
-		if err := run("schtasks", args...); err != nil {
+
+		startupPath, err := serviceFilePath(scope)
+		if err != nil {
 			return err
 		}
-		return run("schtasks", "/Run", "/TN", taskName)
+		if err := os.MkdirAll(filepath.Dir(startupPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(startupPath, []byte(windowsStartupScript(binaryPath, configPath)), 0o644); err != nil {
+			return err
+		}
+		return run("cmd", "/C", "start", "", "/B", binaryPath, "run", "--config", configPath)
 
 	case "darwin":
 		plistPath, err := serviceFilePath(scope)
@@ -155,7 +165,17 @@ func installService(binaryPath string, configPath string, scope string) error {
 func removeService(scope string) error {
 	switch runtime.GOOS {
 	case "windows":
-		return run("schtasks", "/Delete", "/F", "/TN", "FourTwoAgent")
+		if scope == "system" {
+			return run("schtasks", "/Delete", "/F", "/TN", "FourTwoAgent")
+		}
+		startupPath, err := serviceFilePath(scope)
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(startupPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
 	case "darwin":
 		plistPath, err := serviceFilePath(scope)
 		if err != nil {
@@ -215,6 +235,17 @@ func installRoot(scope string) (string, error) {
 }
 
 func serviceFilePath(scope string) (string, error) {
+	if runtime.GOOS == "windows" {
+		if scope == "user" {
+			appData := os.Getenv("APPDATA")
+			if appData == "" {
+				return "", errors.New("APPDATA is not set")
+			}
+			return filepath.Join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "FourTwoAgent.cmd"), nil
+		}
+		return "", nil
+	}
+
 	if runtime.GOOS == "darwin" {
 		if scope == "system" {
 			return "/Library/LaunchDaemons/rf.4-2.agent.plist", nil
@@ -292,6 +323,10 @@ func launchdPlist(binaryPath string, configPath string) string {
   </dict>
 </plist>
 `, binaryPath, configPath)
+}
+
+func windowsStartupScript(binaryPath string, configPath string) string {
+	return fmt.Sprintf("@echo off\r\nstart \"\" /B \"%s\" run --config \"%s\"\r\n", binaryPath, configPath)
 }
 
 func run(name string, args ...string) error {
