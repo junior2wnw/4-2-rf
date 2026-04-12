@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ from pydantic import BaseModel, Field
 from mempalace.searcher import search_memories
 
 COLLECTION_NAME = "mempalace_drawers"
+LOGGER = logging.getLogger("four-two.memory-sidecar")
 
 
 class SearchRequest(BaseModel):
@@ -54,20 +56,24 @@ def ensure_bootstrap_drawer() -> None:
         return
 
     text = os.getenv("MEMORY_BOOTSTRAP_TEXT", "4-2.рф memory bootstrap")
-    collection.upsert(
-        ids=[drawer_id("bootstrap://memory", "system", text)],
-        documents=[text],
-        metadatas=[
-            {
-                "wing": "public-playbooks",
-                "room": "system",
-                "source_file": "bootstrap://memory",
-                "chunk_index": 0,
-                "added_by": "memory-sidecar",
-                "filed_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ],
-    )
+    try:
+        collection.upsert(
+            ids=[drawer_id("bootstrap://memory", "system", text)],
+            documents=[text],
+            metadatas=[
+                {
+                    "wing": "public-playbooks",
+                    "room": "system",
+                    "source_file": "bootstrap://memory",
+                    "chunk_index": 0,
+                    "added_by": "memory-sidecar",
+                    "filed_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ],
+        )
+    except Exception:
+        # Keep the sidecar available even when the first embedding bootstrap is slow or flaky.
+        LOGGER.exception("bootstrap drawer initialization failed")
 
 
 def require_internal_api_key(x_memory_sidecar_key: str | None = Header(default=None)) -> None:
