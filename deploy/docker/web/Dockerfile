@@ -6,18 +6,12 @@ ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_SITE_URL
 
 ENV PNPM_HOME="/pnpm"
-ENV PNPM_STORE_DIR="/pnpm/store"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL"
 ENV NEXT_PUBLIC_SITE_URL="$NEXT_PUBLIC_SITE_URL"
 
-RUN corepack enable \
-  && pnpm config set store-dir "$PNPM_STORE_DIR" \
-  && pnpm config set fetch-retries 5 \
-  && pnpm config set fetch-retry-mintimeout 10000 \
-  && pnpm config set fetch-retry-maxtimeout 120000 \
-  && pnpm config set fetch-timeout 600000
+RUN corepack enable
 
 WORKDIR /workspace
 
@@ -28,7 +22,14 @@ COPY apps/web/package.json apps/web/tsconfig.json apps/web/next.config.ts apps/w
 COPY apps/web/public ./apps/web/public
 COPY apps/web/src ./apps/web/src
 
-RUN --mount=type=cache,id=four-two-pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=four-two-pnpm-store,target=/pnpm/store \
+  pnpm install \
+    --frozen-lockfile \
+    --store-dir /pnpm/store \
+    --fetch-retries 5 \
+    --fetch-retry-mintimeout 10000 \
+    --fetch-retry-maxtimeout 120000 \
+    --fetch-timeout 600000
 RUN pnpm --filter @4-2/contracts build
 RUN pnpm --filter web build
 
