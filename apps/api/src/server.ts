@@ -5,6 +5,7 @@ import { parseEnv } from "./config/env.js";
 import { runMigrations } from "./db/migrator.js";
 import { ChatService } from "./services/chat-service.js";
 import { DownloadService } from "./services/download-service.js";
+import { ExecutionPlannerService } from "./services/execution-planner-service.js";
 import { KnowledgeService } from "./services/knowledge-service.js";
 import { MemoryService } from "./services/memory-service.js";
 import { MetricsService } from "./services/metrics-service.js";
@@ -33,6 +34,7 @@ async function main(): Promise<void> {
     env.API_PUBLIC_BASE_URL,
   );
   const chat = new ChatService(env, metrics);
+  const planner = new ExecutionPlannerService(env, metrics);
   const knowledge = new KnowledgeService(repository, metrics);
 
   const app = await buildApp({
@@ -40,6 +42,7 @@ async function main(): Promise<void> {
     services: {
       chat,
       downloads,
+      planner,
       knowledge,
       memory,
       metrics,

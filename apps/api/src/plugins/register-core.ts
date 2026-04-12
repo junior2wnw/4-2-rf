@@ -27,7 +27,8 @@ export async function registerCorePlugins(
   });
 
   app.addHook("onRequest", async (request) => {
-    request.raw.setTimeout(env.OPENAI_TIMEOUT_MS + 5_000);
+    const setTimeoutFn = (request.raw as { setTimeout?: (ms: number) => void }).setTimeout;
+    setTimeoutFn?.call(request.raw, env.OPENAI_TIMEOUT_MS + 5_000);
     request.headers["x-request-id"] ??= request.id;
     request.log = request.log.child({ requestId: request.id });
     request.startTime = Date.now();

@@ -2,9 +2,21 @@
 
 import { useEffect, useState } from "react";
 
-import type { ChatMessage, ChatSession } from "@4-2/contracts";
+import type {
+  AgentTask,
+  ChatMessage,
+  ChatSession,
+  ChatSessionCreateResponse,
+  ChatSessionState,
+  LinkedAgent,
+} from "@4-2/contracts";
 
 import { absoluteApi } from "@/lib/api";
+import {
+  clearStoredChatSession,
+  loadStoredChatSession,
+  saveStoredChatSession,
+} from "@/lib/chat-session";
 
 type UiMessage = ChatMessage & { pending?: boolean };
 type RuntimeMode = "checking" | "live" | "demo" | "degraded";
@@ -17,7 +29,10 @@ const starterPrompts = [
 
 export function ChatConsole() {
   const [session, setSession] = useState<ChatSession | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
+  const [linkedAgents, setLinkedAgents] = useState<LinkedAgent[]>([]);
+  const [pendingTasks, setPendingTasks] = useState<AgentTask[]>([]);
   const [prompt, setPrompt] = useState<string>(starterPrompts[0] ?? "");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,38 +40,130 @@ export function ChatConsole() {
 
   const canSend = prompt.trim().length > 0 && !streaming;
   const emptyState = messages.length === 0;
+  const connectedAgent = linkedAgents.find((agent) => agent.isConnected) ?? null;
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadHealth() {
+    async function bootstrap() {
       try {
         const response = await fetch(absoluteApi("/healthz"));
         if (!response.ok) {
           throw new Error("health check failed");
         }
 
-        const payload = (await response.json()) as { liveModel?: boolean };
+        const payload = (await response.json()) as {
+          liveModel?: boolean;
+          runtimeStatus?: RuntimeMode;
+        };
+
         if (!cancelled) {
-          setRuntimeMode(payload.liveModel ? "live" : "demo");
+          setRuntimeMode(
+            payload.runtimeStatus ??
+              (payload.liveModel ? "live" : "demo"),
+          );
         }
       } catch {
         if (!cancelled) {
           setRuntimeMode("degraded");
         }
       }
+
+      const stored = loadStoredChatSession();
+      if (!stored || cancelled) {
+        return;
+      }
+
+      try {
+        await refreshSessionState(stored.session.id, stored.accessToken);
+      } catch {
+        clearStoredChatSession();
+      }
     }
 
-    void loadHealth();
+    void bootstrap();
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  async function ensureSession(): Promise<ChatSession> {
-    if (session) {
-      return session;
+  useEffect(() => {
+    if (!session || !sessionToken) {
+      return;
+    }
+
+    let cancelled = false;
+    const currentSessionId = session.id;
+    const currentSessionToken = sessionToken;
+
+    async function tick() {
+      try {
+        await refreshSessionState(currentSessionId, currentSessionToken);
+      } catch (caught) {
+        if (!cancelled) {
+          const message =
+            caught instanceof Error ? caught.message : "Не удалось обновить состояние чата.";
+          setError(message);
+        }
+      }
+    }
+
+    const intervalMs = pendingTasks.length > 0 ? 2500 : 5000;
+    const timer = window.setInterval(() => {
+      void tick();
+    }, intervalMs);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [pendingTasks.length, session, sessionToken]);
+
+  async function refreshSessionState(sessionId: string, accessToken: string): Promise<void> {
+    const response = await fetch(absoluteApi(`/v1/chat/sessions/${sessionId}`), {
+      headers: {
+        accept: "application/json",
+        "x-session-token": accessToken,
+      },
+      cache: "no-store",
+    });
+
+    if (response.status === 401) {
+      clearStoredChatSession();
+      setSession(null);
+      setSessionToken(null);
+      setMessages([]);
+      setLinkedAgents([]);
+      setPendingTasks([]);
+      throw new Error("Сессия чата устарела. Создайте новую.");
+    }
+
+    if (!response.ok) {
+      throw new Error("Не удалось получить состояние чата.");
+    }
+
+    const payload = (await response.json()) as ChatSessionState;
+    setSession(payload.session);
+    setSessionToken(accessToken);
+    setMessages(payload.messages);
+    setLinkedAgents(payload.linkedAgents);
+    setPendingTasks(payload.pendingTasks);
+    saveStoredChatSession({
+      session: payload.session,
+      accessToken,
+    });
+  }
+
+  async function ensureSession(): Promise<{ session: ChatSession; accessToken: string }> {
+    if (session && sessionToken) {
+      return { session, accessToken: sessionToken };
+    }
+
+    const stored = loadStoredChatSession();
+    if (stored) {
+      await refreshSessionState(stored.session.id, stored.accessToken);
+      return stored;
     }
 
     const detected = inferPlatform();
@@ -75,9 +182,20 @@ export function ChatConsole() {
       throw new Error("Не удалось создать сессию чата.");
     }
 
-    const created = (await response.json()) as ChatSession;
-    setSession(created);
-    return created;
+    const created = (await response.json()) as ChatSessionCreateResponse;
+    const next = {
+      session: {
+        id: created.id,
+        displayName: created.displayName,
+        createdAt: created.createdAt,
+      },
+      accessToken: created.accessToken,
+    };
+
+    setSession(next.session);
+    setSessionToken(next.accessToken);
+    saveStoredChatSession(next);
+    return next;
   }
 
   async function sendMessage(nextPrompt: string) {
@@ -111,12 +229,15 @@ export function ChatConsole() {
     setPrompt("");
 
     try {
-      const activeSession = await ensureSession();
+      const active = await ensureSession();
       const clientMessageId = crypto.randomUUID();
 
-      const response = await fetch(absoluteApi(`/v1/chat/sessions/${activeSession.id}/messages`), {
+      const response = await fetch(absoluteApi(`/v1/chat/sessions/${active.session.id}/messages`), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-session-token": active.accessToken,
+        },
         body: JSON.stringify({
           clientMessageId,
           content,
@@ -168,17 +289,33 @@ export function ChatConsole() {
           }
 
           if (event.event === "complete") {
-            setMessages((current) =>
-              current.map((message) =>
-                message.id === assistantId
-                  ? {
-                      ...message,
-                      pending: false,
-                      content: nestedString(event.data, "message", "content") ?? message.content,
-                    }
-                  : message,
-              ),
-            );
+            const nextMessage = nestedMessage(event.data);
+            if (nextMessage) {
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === assistantId ? { ...nextMessage, pending: false } : message,
+                ),
+              );
+            }
+          }
+
+          if (event.event === "task_queued") {
+            const nextMessage = nestedMessage(event.data);
+            const task = nestedTask(event.data);
+
+            if (nextMessage) {
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === assistantId ? { ...nextMessage, pending: false } : message,
+                ),
+              );
+            }
+
+            if (task) {
+              setPendingTasks((current) => upsertTask(current, task));
+            }
+
+            await refreshSessionState(active.session.id, active.accessToken);
           }
 
           if (event.event === "error") {
@@ -191,6 +328,7 @@ export function ChatConsole() {
         }
       }
 
+      await refreshSessionState(active.session.id, active.accessToken);
       setMessages((current) =>
         current.map((message) =>
           message.id === assistantId ? { ...message, pending: false } : message,
@@ -207,7 +345,7 @@ export function ChatConsole() {
                 pending: false,
                 content:
                   item.content ||
-                  "Запрос не завершился. Backend остаётся живым, но конкретная генерация на этом ходе упала.",
+                  "Запрос не завершился. Backend остаётся живым, но конкретная обработка этого хода упала.",
               }
             : item,
         ),
@@ -229,6 +367,17 @@ export function ChatConsole() {
         <div className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
           {streaming ? "streaming" : runtimeMode}
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 text-xs text-[var(--muted)]">
+        <span className="rounded-full border border-[var(--border)] px-3 py-1">
+          {connectedAgent
+            ? `device: ${connectedAgent.hostname} (${connectedAgent.platform})`
+            : "device: not connected"}
+        </span>
+        <span className="rounded-full border border-[var(--border)] px-3 py-1">
+          tasks: {pendingTasks.length}
+        </span>
       </div>
 
       <div className="grid gap-3 rounded-[1.5rem] border border-[var(--border-soft)] bg-[var(--console)] p-4">
@@ -279,7 +428,7 @@ export function ChatConsole() {
           <textarea
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
-            placeholder="Например: сделай мне жёсткий аудит идеи и предложи лучший ростовой поворот"
+            placeholder="Например: создай на моём компьютере папку D:\\Reports и положи туда текстовый файл со списком сегодняшних задач"
             rows={4}
             className="min-h-28 rounded-[1.4rem] border border-[var(--border)] bg-black/10 px-4 py-3 text-sm leading-6 text-[var(--ink)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--signal)]"
           />
@@ -287,13 +436,13 @@ export function ChatConsole() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="max-w-[34rem] text-xs leading-5 text-[var(--muted)]">
-            Чат работает прямо на сайте. Подключение локального агента становится вторым шагом,
-            когда ценность уже доказана.
+            Если устройство подключено к этой же сессии, чат может поставить локальную задачу в
+            очередь и дождаться результата прямо в переписке.
           </p>
           <button
             type="button"
             disabled={!canSend}
-            onClick={() => sendMessage(prompt)}
+            onClick={() => void sendMessage(prompt)}
             className="rounded-full bg-[var(--signal)] px-5 py-3 text-sm font-medium text-[var(--signal-ink)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {streaming ? "Генерация..." : "Запустить"}
@@ -309,7 +458,14 @@ export function ChatConsole() {
 
         {runtimeMode === "degraded" ? (
           <div className="rounded-[1rem] border border-[#ff8d6a55] bg-[#ff8d6a12] px-4 py-3 text-sm text-[#ffc3b0]">
-            Статус модели сейчас не подтвердился, но сам чатовый контур остаётся доступным.
+            Live-модель сейчас не подтверждена. Базовый контур доступен, но реальные исполнения и
+            качественные ответы зависят от исправного ключа и API.
+          </div>
+        ) : null}
+
+        {pendingTasks.length > 0 ? (
+          <div className="rounded-[1rem] border border-[var(--border)] bg-white/4 px-4 py-3 text-sm text-[var(--ink-soft)]">
+            Активные задачи: {pendingTasks.map((task) => `${task.title} (${task.status})`).join(", ")}
           </div>
         ) : null}
 
@@ -358,16 +514,31 @@ function parseSse(chunk: string): { event: string; data: Record<string, unknown>
   }
 }
 
-function nestedString(
-  value: Record<string, unknown> | null,
-  key: string,
-  nestedKey: string,
-): string | null {
-  const first = value?.[key];
-  if (!first || typeof first !== "object") {
+function nestedMessage(data: Record<string, unknown> | null): ChatMessage | null {
+  const value = data?.message;
+  if (!value || typeof value !== "object") {
     return null;
   }
 
-  const second = (first as Record<string, unknown>)[nestedKey];
-  return typeof second === "string" ? second : null;
+  const message = value as ChatMessage;
+  return message.id ? message : null;
+}
+
+function nestedTask(data: Record<string, unknown> | null): AgentTask | null {
+  const value = data?.task;
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const task = value as AgentTask;
+  return task.id ? task : null;
+}
+
+function upsertTask(current: AgentTask[], next: AgentTask): AgentTask[] {
+  const found = current.some((item) => item.id === next.id);
+  if (!found) {
+    return [...current, next];
+  }
+
+  return current.map((item) => (item.id === next.id ? next : item));
 }

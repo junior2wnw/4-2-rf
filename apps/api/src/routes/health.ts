@@ -2,11 +2,13 @@ import type { FastifyPluginAsync } from "fastify";
 
 export const healthRoutes: FastifyPluginAsync = async (app) => {
   app.get("/healthz", async () => {
+    const plannerStatus = await app.services.planner.getRuntimeStatus();
     return {
       status: "ok",
       service: "api",
       now: new Date().toISOString(),
-      liveModel: app.services.chat.isLiveModelEnabled(),
+      liveModel: plannerStatus === "live",
+      runtimeStatus: plannerStatus,
     };
   });
 

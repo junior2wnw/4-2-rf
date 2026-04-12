@@ -10,6 +10,7 @@ import { knowledgeRoutes } from "./routes/knowledge.js";
 import { publicRoutes } from "./routes/public.js";
 import type { ChatService } from "./services/chat-service.js";
 import type { DownloadService } from "./services/download-service.js";
+import type { ExecutionPlannerService } from "./services/execution-planner-service.js";
 import type { KnowledgeService } from "./services/knowledge-service.js";
 import type { MemoryService } from "./services/memory-service.js";
 import type { MetricsService } from "./services/metrics-service.js";
@@ -18,6 +19,7 @@ import type { Repository } from "./services/repository.js";
 export type AppServices = {
   chat: ChatService;
   downloads: DownloadService;
+  planner: ExecutionPlannerService;
   knowledge: KnowledgeService;
   memory: MemoryService;
   metrics: MetricsService;

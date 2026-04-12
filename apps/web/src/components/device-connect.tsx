@@ -2,9 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { DownloadManifest, DownloadManifestItem, InstallTokenResponse } from "@4-2/contracts";
+import type {
+  ChatSessionCreateResponse,
+  DownloadManifest,
+  DownloadManifestItem,
+  InstallTokenResponse,
+} from "@4-2/contracts";
 
 import { absoluteApi } from "@/lib/api";
+import { loadStoredChatSession, saveStoredChatSession } from "@/lib/chat-session";
 
 type InstallScope = "user" | "system";
 type DeviceGuess = {
@@ -81,14 +87,19 @@ export function DeviceConnect() {
     setCopied(false);
 
     try {
+      const activeSession = await ensureBrowserSession();
       const response = await fetch(absoluteApi("/v1/installers/enrollment-token"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-session-token": activeSession.accessToken,
+        },
         body: JSON.stringify({
           platform: selectedItem.platform,
           arch: selectedItem.arch,
           scope,
           requestedBy: `website-self-serve:${selectedItem.platform}-${selectedItem.arch}`,
+          sessionId: activeSession.session.id,
         }),
       });
 
@@ -299,6 +310,44 @@ function applyScopeAndToken(command: string, scope: InstallScope, token: string)
   return command
     .replace("--scope user", `--scope ${scope}`)
     .replace("<token-from-site>", token);
+}
+
+async function ensureBrowserSession(): Promise<{
+  session: { id: string; displayName: string; createdAt: string };
+  accessToken: string;
+}> {
+  const stored = loadStoredChatSession();
+  if (stored) {
+    return stored;
+  }
+
+  const detected = await detectDevice();
+  const response = await fetch(absoluteApi("/v1/chat/sessions"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      displayName: "Website visitor",
+      platform: detected.platform,
+      arch: detected.arch,
+      userAgent: navigator.userAgent,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Не удалось создать chat session для привязки устройства.");
+  }
+
+  const created = (await response.json()) as ChatSessionCreateResponse;
+  const next = {
+    session: {
+      id: created.id,
+      displayName: created.displayName,
+      createdAt: created.createdAt,
+    },
+    accessToken: created.accessToken,
+  };
+  saveStoredChatSession(next);
+  return next;
 }
 
 async function detectDevice(): Promise<DeviceGuess> {

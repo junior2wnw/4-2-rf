@@ -17,6 +17,10 @@ export const chatSessionSchema = z.object({
   createdAt: z.string().datetime(),
 });
 
+export const chatSessionCreateResponseSchema = chatSessionSchema.extend({
+  accessToken: z.string().min(24).max(128),
+});
+
 export const chatMessageRequestSchema = z.object({
   clientMessageId: z.string().trim().min(8).max(128),
   content: z.string().trim().min(1).max(12_000),
@@ -59,6 +63,7 @@ export const installTokenRequestSchema = z.object({
   arch: archSchema,
   scope: installScopeSchema.default("user"),
   requestedBy: z.string().trim().min(1).max(120),
+  sessionId: z.string().uuid().optional(),
 });
 
 export const installTokenResponseSchema = z.object({
@@ -87,6 +92,81 @@ export const heartbeatSchema = z.object({
   heartbeatToken: z.string().min(24),
   status: z.enum(["starting", "ready", "degraded"]),
   installedAt: z.string().datetime(),
+});
+
+export const linkedAgentSchema = z.object({
+  id: z.string().uuid(),
+  hostname: z.string(),
+  platform: platformSchema,
+  arch: archSchema,
+  scope: installScopeSchema,
+  status: z.enum(["starting", "ready", "degraded"]),
+  agentVersion: z.string(),
+  osVersion: z.string(),
+  lastSeenAt: z.string().datetime(),
+  linkedAt: z.string().datetime(),
+  isConnected: z.boolean(),
+});
+
+export const agentTaskStateSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "timed_out",
+  "cancelled",
+]);
+
+export const agentTaskSchema = z.object({
+  id: z.string().uuid(),
+  assistantMessageId: z.string().uuid(),
+  title: z.string(),
+  summary: z.string(),
+  status: agentTaskStateSchema,
+  exitCode: z.number().int().nullable(),
+  stdout: z.string().nullable(),
+  stderr: z.string().nullable(),
+  assistantContent: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  startedAt: z.string().datetime().nullable(),
+  finishedAt: z.string().datetime().nullable(),
+});
+
+export const chatSessionStateSchema = z.object({
+  session: chatSessionSchema,
+  messages: z.array(chatMessageSchema),
+  linkedAgents: z.array(linkedAgentSchema),
+  pendingTasks: z.array(agentTaskSchema),
+});
+
+export const agentTaskClaimSchema = z.object({
+  agentId: z.string().uuid(),
+  heartbeatToken: z.string().min(24),
+});
+
+export const agentTaskClaimResponseSchema = z.object({
+  task: z
+    .object({
+      id: z.string().uuid(),
+      title: z.string(),
+      summary: z.string(),
+      command: z.string(),
+      workingDirectory: z.string().nullable(),
+      timeoutSeconds: z.number().int().min(5).max(900),
+      shell: z.enum(["powershell", "sh"]),
+    })
+    .nullable(),
+});
+
+export const agentTaskCompleteSchema = z.object({
+  agentId: z.string().uuid(),
+  heartbeatToken: z.string().min(24),
+  status: z.enum(["succeeded", "failed", "timed_out", "cancelled"]),
+  exitCode: z.number().int().nullable(),
+  stdout: z.string().max(128_000).nullable(),
+  stderr: z.string().max(128_000).nullable(),
+  startedAt: z.string().datetime(),
+  finishedAt: z.string().datetime(),
 });
 
 export const memorySearchRequestSchema = z.object({
@@ -151,6 +231,7 @@ export const knowledgePromotionListResponseSchema = z.object({
 
 export type ChatSessionCreate = z.infer<typeof chatSessionCreateSchema>;
 export type ChatSession = z.infer<typeof chatSessionSchema>;
+export type ChatSessionCreateResponse = z.infer<typeof chatSessionCreateResponseSchema>;
 export type ChatMessageRequest = z.infer<typeof chatMessageRequestSchema>;
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export type PublicConfig = z.infer<typeof publicConfigSchema>;
@@ -161,6 +242,12 @@ export type InstallTokenResponse = z.infer<typeof installTokenResponseSchema>;
 export type AgentRegister = z.infer<typeof agentRegisterSchema>;
 export type AgentRegistrationResponse = z.infer<typeof agentRegistrationResponseSchema>;
 export type HeartbeatPayload = z.infer<typeof heartbeatSchema>;
+export type LinkedAgent = z.infer<typeof linkedAgentSchema>;
+export type AgentTask = z.infer<typeof agentTaskSchema>;
+export type ChatSessionState = z.infer<typeof chatSessionStateSchema>;
+export type AgentTaskClaim = z.infer<typeof agentTaskClaimSchema>;
+export type AgentTaskClaimResponse = z.infer<typeof agentTaskClaimResponseSchema>;
+export type AgentTaskComplete = z.infer<typeof agentTaskCompleteSchema>;
 export type MemorySearchRequest = z.infer<typeof memorySearchRequestSchema>;
 export type MemorySearchResponse = z.infer<typeof memorySearchResponseSchema>;
 export type KnowledgePromotionCreate = z.infer<typeof knowledgePromotionCreateSchema>;

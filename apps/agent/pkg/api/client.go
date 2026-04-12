@@ -38,6 +38,36 @@ type HeartbeatRequest struct {
 	InstalledAt     string `json:"installedAt"`
 }
 
+type ClaimTaskRequest struct {
+	AgentID        string `json:"agentId"`
+	HeartbeatToken string `json:"heartbeatToken"`
+}
+
+type ClaimedTask struct {
+	ID               string  `json:"id"`
+	Title            string  `json:"title"`
+	Summary          string  `json:"summary"`
+	Command          string  `json:"command"`
+	WorkingDirectory *string `json:"workingDirectory"`
+	TimeoutSeconds   int     `json:"timeoutSeconds"`
+	Shell            string  `json:"shell"`
+}
+
+type ClaimTaskResponse struct {
+	Task *ClaimedTask `json:"task"`
+}
+
+type CompleteTaskRequest struct {
+	AgentID        string  `json:"agentId"`
+	HeartbeatToken string  `json:"heartbeatToken"`
+	Status         string  `json:"status"`
+	ExitCode       *int    `json:"exitCode"`
+	Stdout         *string `json:"stdout"`
+	Stderr         *string `json:"stderr"`
+	StartedAt      string  `json:"startedAt"`
+	FinishedAt     string  `json:"finishedAt"`
+}
+
 func New(baseURL string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
@@ -60,6 +90,21 @@ func (c *Client) Register(ctx context.Context, payload RegisterRequest) (Registe
 func (c *Client) Heartbeat(ctx context.Context, payload HeartbeatRequest) error {
 	var result map[string]any
 	return c.post(ctx, "/v1/agents/heartbeat", payload, &result)
+}
+
+func (c *Client) ClaimTask(ctx context.Context, payload ClaimTaskRequest) (*ClaimedTask, error) {
+	var result ClaimTaskResponse
+
+	if err := c.post(ctx, "/v1/agents/tasks/claim", payload, &result); err != nil {
+		return nil, err
+	}
+
+	return result.Task, nil
+}
+
+func (c *Client) CompleteTask(ctx context.Context, taskID string, payload CompleteTaskRequest) error {
+	var result map[string]any
+	return c.post(ctx, "/v1/agents/tasks/"+taskID+"/complete", payload, &result)
 }
 
 func (c *Client) post(ctx context.Context, path string, payload any, out any) error {

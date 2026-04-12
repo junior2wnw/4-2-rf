@@ -40,6 +40,20 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  private readonly plannerDecisions = new Counter({
+    name: "four_two_planner_decisions_total",
+    help: "Execution planner decisions",
+    labelNames: ["mode"] as const,
+    registers: [this.registry],
+  });
+
+  private readonly agentTaskEvents = new Counter({
+    name: "four_two_agent_tasks_total",
+    help: "Agent task lifecycle events",
+    labelNames: ["status"] as const,
+    registers: [this.registry],
+  });
+
   public constructor() {
     collectDefaultMetrics({
       prefix: "four_two_",
@@ -51,7 +65,11 @@ export class MetricsService {
     this.httpDuration.labels(input.method, input.route, String(input.statusCode)).observe(input.durationMs / 1000);
   }
 
-  public observeOpenAi(input: { mode: "stream" | "mock"; status: "ok" | "error"; durationMs: number }): void {
+  public observeOpenAi(input: {
+    mode: "stream" | "mock" | "plan" | "probe";
+    status: "ok" | "error";
+    durationMs: number;
+  }): void {
     this.openAiDuration.labels(input.mode, input.status).observe(input.durationMs / 1000);
   }
 
@@ -67,6 +85,16 @@ export class MetricsService {
     status: "auto_created" | "manual_created" | "duplicate" | "published" | "rejected" | "skipped",
   ): void {
     this.knowledgePromotions.labels(status).inc();
+  }
+
+  public markPlannerDecision(mode: "answer" | "local_task" | "fallback"): void {
+    this.plannerDecisions.labels(mode).inc();
+  }
+
+  public markAgentTask(
+    status: "queued" | "claimed" | "succeeded" | "failed" | "timed_out" | "cancelled",
+  ): void {
+    this.agentTaskEvents.labels(status).inc();
   }
 
   public async render(): Promise<string> {

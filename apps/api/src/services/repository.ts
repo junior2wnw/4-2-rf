@@ -1,15 +1,18 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import type {
+  AgentTask,
   ChatMessage,
   ChatSession,
   ChatSessionCreate,
+  ChatSessionCreateResponse,
   InstallTokenRequest,
   KnowledgePromotion,
   KnowledgePromotionCreate,
   KnowledgePromotionListQuery,
+  LinkedAgent,
 } from "@4-2/contracts";
 
 type SessionRow = {
@@ -17,6 +20,7 @@ type SessionRow = {
   display_name: string;
   created_at: string;
   openai_previous_response_id: string | null;
+  access_token: string;
 };
 
 type MessageRow = {
@@ -33,6 +37,39 @@ type InstallTokenRow = {
   scope: string;
   requested_by: string;
   expires_at: string;
+  session_id: string | null;
+};
+
+type AgentRegistrationRow = {
+  id: string;
+  hostname: string;
+  platform: "windows" | "macos" | "linux";
+  arch: "amd64" | "arm64";
+  scope: "user" | "system";
+  agent_version: string;
+  os_version: string;
+  status: "starting" | "ready" | "degraded";
+  last_seen_at: string;
+  installed_at: string;
+};
+
+type AgentTaskRow = {
+  id: string;
+  assistant_message_id: string;
+  title: string;
+  summary: string;
+  command: string;
+  working_directory: string | null;
+  shell: "powershell" | "sh";
+  timeout_seconds: number;
+  status: "queued" | "running" | "succeeded" | "failed" | "timed_out" | "cancelled";
+  exit_code: number | null;
+  stdout: string | null;
+  stderr: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  assistant_content: string | null;
 };
 
 type KnowledgePromotionRow = {
@@ -52,6 +89,11 @@ type KnowledgePromotionRow = {
   published_at: string | null;
 };
 
+const AGENT_CONNECTED_WINDOW_MS = 2 * 60 * 1000;
+const STALE_TASK_GRACE_SECONDS = 15;
+const STALE_TASK_SERVER_NOTE =
+  "The agent did not report completion before the server watchdog expired this task.";
+
 export class Repository {
   public constructor(private readonly pool: Pool) {}
 
@@ -59,25 +101,60 @@ export class Repository {
     await this.pool.query("SELECT 1");
   }
 
-  public async createChatSession(input: ChatSessionCreate): Promise<ChatSession> {
+  public async createChatSession(input: ChatSessionCreate): Promise<ChatSessionCreateResponse> {
     const id = randomUUID();
+    const accessToken = randomBytes(24).toString("hex");
     const result = await this.pool.query<SessionRow>(
       `
-        INSERT INTO chat_sessions(id, display_name, platform, arch, user_agent)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, display_name, created_at, openai_previous_response_id
+        INSERT INTO chat_sessions(id, display_name, platform, arch, user_agent, access_token)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, display_name, created_at, openai_previous_response_id, access_token
       `,
-      [id, input.displayName, input.platform ?? null, input.arch ?? null, input.userAgent ?? null],
+      [id, input.displayName, input.platform ?? null, input.arch ?? null, input.userAgent ?? null, accessToken],
     );
 
     const row = firstRow(result.rows, "chat session insert returned no row");
-    return mapSession(row);
+    return {
+      ...mapSession(row),
+      accessToken: row.access_token,
+    };
   }
 
-  public async getChatSession(id: string): Promise<(ChatSession & { previousResponseId: string | null }) | null> {
+  public async getChatSession(
+    id: string,
+  ): Promise<(ChatSession & { previousResponseId: string | null }) | null> {
     const result = await this.pool.query<SessionRow>(
-      "SELECT id, display_name, created_at, openai_previous_response_id FROM chat_sessions WHERE id = $1",
+      `
+        SELECT id, display_name, created_at, openai_previous_response_id, access_token
+        FROM chat_sessions
+        WHERE id = $1
+      `,
       [id],
+    );
+
+    if (!result.rowCount) {
+      return null;
+    }
+
+    const row = firstRow(result.rows, "chat session select returned no row");
+    return {
+      ...mapSession(row),
+      previousResponseId: row.openai_previous_response_id,
+    };
+  }
+
+  public async getChatSessionForAccess(
+    id: string,
+    accessToken: string,
+  ): Promise<(ChatSession & { previousResponseId: string | null }) | null> {
+    const result = await this.pool.query<SessionRow>(
+      `
+        SELECT id, display_name, created_at, openai_previous_response_id, access_token
+        FROM chat_sessions
+        WHERE id = $1
+          AND access_token = $2
+      `,
+      [id, accessToken],
     );
 
     if (!result.rowCount) {
@@ -103,6 +180,65 @@ export class Repository {
     );
 
     return result.rows.map(mapMessage);
+  }
+
+  public async listLinkedAgents(sessionId: string): Promise<LinkedAgent[]> {
+    const result = await this.pool.query<AgentRegistrationRow>(
+      `
+        SELECT
+          id,
+          hostname,
+          platform,
+          arch,
+          scope,
+          agent_version,
+          os_version,
+          status,
+          last_seen_at,
+          installed_at
+        FROM agent_registrations
+        WHERE session_id = $1
+        ORDER BY last_seen_at DESC
+      `,
+      [sessionId],
+    );
+
+    return result.rows.map(mapLinkedAgent);
+  }
+
+  public async listPendingAgentTasks(sessionId: string): Promise<AgentTask[]> {
+    await this.reconcileExpiredAgentTasks();
+
+    const result = await this.pool.query<AgentTaskRow>(
+      `
+        SELECT
+          tasks.id,
+          tasks.assistant_message_id,
+          tasks.title,
+          tasks.summary,
+          tasks.command,
+          tasks.working_directory,
+          tasks.shell,
+          tasks.timeout_seconds,
+          tasks.status,
+          tasks.exit_code,
+          tasks.stdout,
+          tasks.stderr,
+          tasks.created_at,
+          tasks.started_at,
+          tasks.finished_at,
+          messages.content AS assistant_content
+        FROM agent_tasks AS tasks
+        JOIN chat_messages AS messages
+          ON messages.id = tasks.assistant_message_id
+        WHERE tasks.session_id = $1
+          AND tasks.status IN ('queued', 'running')
+        ORDER BY tasks.created_at ASC
+      `,
+      [sessionId],
+    );
+
+    return result.rows.map(mapAgentTask);
   }
 
   public async hasClientMessage(sessionId: string, clientMessageId: string): Promise<boolean> {
@@ -155,6 +291,24 @@ export class Repository {
     return mapMessage(row);
   }
 
+  public async updateMessageContent(messageId: string, content: string): Promise<ChatMessage | null> {
+    const result = await this.pool.query<MessageRow>(
+      `
+        UPDATE chat_messages
+        SET content = $2
+        WHERE id = $1
+        RETURNING id, role, content, created_at
+      `,
+      [messageId, content],
+    );
+
+    if (!result.rowCount) {
+      return null;
+    }
+
+    return mapMessage(firstRow(result.rows, "chat message update returned no row"));
+  }
+
   public async updateSessionResponseId(sessionId: string, previousResponseId: string): Promise<void> {
     await this.pool.query(
       `
@@ -173,10 +327,10 @@ export class Repository {
 
     await this.pool.query(
       `
-        INSERT INTO install_tokens(token, platform, arch, scope, requested_by, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO install_tokens(token, platform, arch, scope, requested_by, expires_at, session_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
       `,
-      [token, input.platform, input.arch, input.scope, input.requestedBy, expiresAt],
+      [token, input.platform, input.arch, input.scope, input.requestedBy, expiresAt, input.sessionId ?? null],
     );
 
     return { token, expiresAt };
@@ -198,7 +352,7 @@ export class Repository {
 
       const tokenRow = await client.query<InstallTokenRow>(
         `
-          SELECT token, platform, arch, scope, requested_by, expires_at
+          SELECT token, platform, arch, scope, requested_by, expires_at, session_id
           FROM install_tokens
           WHERE token = $1
             AND redeemed_at IS NULL
@@ -235,9 +389,10 @@ export class Repository {
             os_version,
             status,
             installed_at,
-            last_seen_at
+            last_seen_at,
+            session_id
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'starting', $10, $10)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'starting', $10, $10, $11)
         `,
         [
           agentId,
@@ -250,6 +405,7 @@ export class Repository {
           input.agentVersion,
           input.osVersion,
           installedAt,
+          row.session_id,
         ],
       );
 
@@ -286,6 +442,415 @@ export class Repository {
     );
 
     return Boolean(result.rowCount);
+  }
+
+  public async isValidAgentHeartbeat(agentId: string, heartbeatToken: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `
+        SELECT 1
+        FROM agent_registrations
+        WHERE id = $1
+          AND heartbeat_token = $2
+      `,
+      [agentId, heartbeatToken],
+    );
+
+    return Boolean(result.rowCount);
+  }
+
+  public async getReadyAgentForSession(sessionId: string): Promise<LinkedAgent | null> {
+    const result = await this.pool.query<AgentRegistrationRow>(
+      `
+        SELECT
+          id,
+          hostname,
+          platform,
+          arch,
+          scope,
+          agent_version,
+          os_version,
+          status,
+          last_seen_at,
+          installed_at
+        FROM agent_registrations
+        WHERE session_id = $1
+          AND status = 'ready'
+        ORDER BY last_seen_at DESC
+        LIMIT 1
+      `,
+      [sessionId],
+    );
+
+    if (!result.rowCount) {
+      return null;
+    }
+
+    const agent = mapLinkedAgent(firstRow(result.rows, "ready agent lookup returned no row"));
+    return agent.isConnected ? agent : null;
+  }
+
+  public async createAgentTask(input: {
+    sessionId: string;
+    agentId: string;
+    assistantMessageId: string;
+    title: string;
+    summary: string;
+    command: string;
+    workingDirectory?: string | null;
+    timeoutSeconds: number;
+    shell: "powershell" | "sh";
+  }): Promise<AgentTask> {
+    const result = await this.pool.query<AgentTaskRow>(
+      `
+        INSERT INTO agent_tasks(
+          id,
+          session_id,
+          agent_id,
+          assistant_message_id,
+          title,
+          summary,
+          command,
+          working_directory,
+          shell,
+          timeout_seconds,
+          status
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'queued')
+        RETURNING
+          id,
+          assistant_message_id,
+          title,
+          summary,
+          command,
+          working_directory,
+          shell,
+          timeout_seconds,
+          status,
+          exit_code,
+          stdout,
+          stderr,
+          created_at,
+          started_at,
+          finished_at,
+          NULL::TEXT AS assistant_content
+      `,
+      [
+        randomUUID(),
+        input.sessionId,
+        input.agentId,
+        input.assistantMessageId,
+        input.title,
+        input.summary,
+        input.command,
+        input.workingDirectory ?? null,
+        input.shell,
+        input.timeoutSeconds,
+      ],
+    );
+
+    return mapAgentTask(firstRow(result.rows, "agent task insert returned no row"));
+  }
+
+  public async claimNextAgentTask(input: {
+    agentId: string;
+    heartbeatToken: string;
+  }): Promise<{
+    id: string;
+    title: string;
+    summary: string;
+    command: string;
+    workingDirectory: string | null;
+    timeoutSeconds: number;
+    shell: "powershell" | "sh";
+  } | null> {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query("BEGIN");
+      await this.reconcileExpiredAgentTasks(client);
+
+      const auth = await client.query(
+        `
+          SELECT 1
+          FROM agent_registrations
+          WHERE id = $1
+            AND heartbeat_token = $2
+        `,
+        [input.agentId, input.heartbeatToken],
+      );
+
+      if (!auth.rowCount) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      const taskResult = await client.query<AgentTaskRow>(
+        `
+          SELECT
+            id,
+            assistant_message_id,
+            title,
+            summary,
+            command,
+            working_directory,
+            shell,
+            timeout_seconds,
+            status,
+            exit_code,
+            stdout,
+            stderr,
+            created_at,
+            started_at,
+            finished_at,
+            NULL::TEXT AS assistant_content
+          FROM agent_tasks
+          WHERE agent_id = $1
+            AND status = 'queued'
+          ORDER BY created_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        `,
+        [input.agentId],
+      );
+
+      if (!taskResult.rowCount) {
+        await client.query("COMMIT");
+        return null;
+      }
+
+      const task = firstRow(taskResult.rows, "agent task claim returned no row");
+
+      await client.query(
+        `
+          UPDATE agent_tasks
+          SET status = 'running',
+              started_at = NOW()
+          WHERE id = $1
+        `,
+        [task.id],
+      );
+
+      await client.query("COMMIT");
+
+      return {
+        id: task.id,
+        title: task.title,
+        summary: task.summary,
+        command: task.command,
+        workingDirectory: task.working_directory,
+        timeoutSeconds: task.timeout_seconds,
+        shell: task.shell,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  public async getAgentTaskExecutionDetails(input: {
+    taskId: string;
+    agentId: string;
+  }): Promise<{
+    title: string;
+    summary: string;
+    command: string;
+    workingDirectory: string | null;
+  } | null> {
+    await this.reconcileExpiredAgentTasks();
+
+    const result = await this.pool.query<AgentTaskRow>(
+      `
+        SELECT
+          id,
+          assistant_message_id,
+          title,
+          summary,
+          command,
+          working_directory,
+          shell,
+          timeout_seconds,
+          status,
+          exit_code,
+          stdout,
+          stderr,
+          created_at,
+          started_at,
+          finished_at,
+          NULL::TEXT AS assistant_content
+        FROM agent_tasks
+        WHERE id = $1
+          AND agent_id = $2
+      `,
+      [input.taskId, input.agentId],
+    );
+
+    if (!result.rowCount) {
+      return null;
+    }
+
+    const row = firstRow(result.rows, "agent task details returned no row");
+    return {
+      title: row.title,
+      summary: row.summary,
+      command: row.command,
+      workingDirectory: row.working_directory,
+    };
+  }
+
+  public async completeAgentTask(input: {
+    taskId: string;
+    agentId: string;
+    heartbeatToken: string;
+    status: "succeeded" | "failed" | "timed_out" | "cancelled";
+    exitCode: number | null;
+    stdout: string | null;
+    stderr: string | null;
+    startedAt: string;
+    finishedAt: string;
+    assistantContent: string;
+  }): Promise<
+    | (AgentTask & {
+        title: string;
+        summary: string;
+        command: string;
+        workingDirectory: string | null;
+      })
+    | null
+  > {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const auth = await client.query(
+        `
+          SELECT 1
+          FROM agent_registrations
+          WHERE id = $1
+            AND heartbeat_token = $2
+        `,
+        [input.agentId, input.heartbeatToken],
+      );
+
+      if (!auth.rowCount) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      const updateTask = await client.query<AgentTaskRow>(
+        `
+          UPDATE agent_tasks
+          SET status = $3,
+              exit_code = $4,
+              stdout = $5,
+              stderr = $6,
+              started_at = $7,
+              finished_at = $8
+          WHERE id = $1
+            AND agent_id = $2
+            AND status IN ('queued', 'running')
+          RETURNING
+            id,
+            assistant_message_id,
+            title,
+            summary,
+            command,
+            working_directory,
+            shell,
+            timeout_seconds,
+            status,
+            exit_code,
+            stdout,
+            stderr,
+            created_at,
+            started_at,
+            finished_at,
+            NULL::TEXT AS assistant_content
+        `,
+        [
+          input.taskId,
+          input.agentId,
+          input.status,
+          input.exitCode,
+          input.stdout,
+          input.stderr,
+          input.startedAt,
+          input.finishedAt,
+        ],
+      );
+
+      if (!updateTask.rowCount) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      const task = firstRow(updateTask.rows, "agent task completion returned no row");
+
+      await client.query(
+        `
+          UPDATE chat_messages
+          SET content = $2
+          WHERE id = $1
+        `,
+        [task.assistant_message_id, input.assistantContent],
+      );
+
+      await client.query("COMMIT");
+
+      return {
+        ...mapAgentTask(task),
+        title: task.title,
+        summary: task.summary,
+        command: task.command,
+        workingDirectory: task.working_directory,
+        assistantContent: input.assistantContent,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  public async getAgentTaskForSession(sessionId: string, taskId: string): Promise<AgentTask | null> {
+    await this.reconcileExpiredAgentTasks();
+
+    const result = await this.pool.query<AgentTaskRow>(
+      `
+        SELECT
+          tasks.id,
+          tasks.assistant_message_id,
+          tasks.title,
+          tasks.summary,
+          tasks.command,
+          tasks.working_directory,
+          tasks.shell,
+          tasks.timeout_seconds,
+          tasks.status,
+          tasks.exit_code,
+          tasks.stdout,
+          tasks.stderr,
+          tasks.created_at,
+          tasks.started_at,
+          tasks.finished_at,
+          messages.content AS assistant_content
+        FROM agent_tasks AS tasks
+        JOIN chat_messages AS messages
+          ON messages.id = tasks.assistant_message_id
+        WHERE tasks.session_id = $1
+          AND tasks.id = $2
+      `,
+      [sessionId, taskId],
+    );
+
+    if (!result.rowCount) {
+      return null;
+    }
+
+    return mapAgentTask(firstRow(result.rows, "agent task select returned no row"));
   }
 
   public async createKnowledgePromotion(
@@ -536,6 +1101,73 @@ export class Repository {
       firstRow(result.rows, "knowledge promotion reject returned no row"),
     );
   }
+
+  private async reconcileExpiredAgentTasks(client: Pool | PoolClient = this.pool): Promise<void> {
+    const expired = await client.query<AgentTaskRow>(
+      `
+        WITH expired AS (
+          UPDATE agent_tasks
+          SET status = 'timed_out',
+              exit_code = COALESCE(exit_code, -1),
+              finished_at = NOW(),
+              stderr = CASE
+                WHEN stderr IS NULL OR stderr = '' THEN $1
+                ELSE stderr || E'\\n\\n' || $1
+              END
+          WHERE status = 'running'
+            AND started_at IS NOT NULL
+            AND NOW() >= started_at + make_interval(secs => timeout_seconds + $2)
+          RETURNING
+            id,
+            assistant_message_id,
+            title,
+            summary,
+            command,
+            working_directory,
+            shell,
+            timeout_seconds,
+            status,
+            exit_code,
+            stdout,
+            stderr,
+            created_at,
+            started_at,
+            finished_at,
+            NULL::TEXT AS assistant_content
+        )
+        SELECT
+          id,
+          assistant_message_id,
+          title,
+          summary,
+          command,
+          working_directory,
+          shell,
+          timeout_seconds,
+          status,
+          exit_code,
+          stdout,
+          stderr,
+          created_at,
+          started_at,
+          finished_at,
+          assistant_content
+        FROM expired
+      `,
+      [STALE_TASK_SERVER_NOTE, STALE_TASK_GRACE_SECONDS],
+    );
+
+    for (const row of expired.rows) {
+      await client.query(
+        `
+          UPDATE chat_messages
+          SET content = $2
+          WHERE id = $1
+        `,
+        [row.assistant_message_id, buildTimedOutAssistantContent(row)],
+      );
+    }
+  }
 }
 
 function firstRow<T>(rows: T[], message: string): T {
@@ -563,6 +1195,40 @@ function mapMessage(row: MessageRow): ChatMessage {
   };
 }
 
+function mapLinkedAgent(row: AgentRegistrationRow): LinkedAgent {
+  const lastSeenAt = new Date(row.last_seen_at).toISOString();
+  return {
+    id: row.id,
+    hostname: row.hostname,
+    platform: row.platform,
+    arch: row.arch,
+    scope: row.scope,
+    status: row.status,
+    agentVersion: row.agent_version,
+    osVersion: row.os_version,
+    lastSeenAt,
+    linkedAt: new Date(row.installed_at).toISOString(),
+    isConnected: Date.now() - new Date(lastSeenAt).getTime() <= AGENT_CONNECTED_WINDOW_MS,
+  };
+}
+
+function mapAgentTask(row: AgentTaskRow): AgentTask {
+  return {
+    id: row.id,
+    assistantMessageId: row.assistant_message_id,
+    title: row.title,
+    summary: row.summary,
+    status: row.status,
+    exitCode: row.exit_code,
+    stdout: row.stdout,
+    stderr: row.stderr,
+    assistantContent: row.assistant_content,
+    createdAt: new Date(row.created_at).toISOString(),
+    startedAt: row.started_at ? new Date(row.started_at).toISOString() : null,
+    finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
+  };
+}
+
 function mapKnowledgePromotion(row: KnowledgePromotionRow): KnowledgePromotion {
   return {
     id: row.id,
@@ -584,4 +1250,25 @@ function mapKnowledgePromotion(row: KnowledgePromotionRow): KnowledgePromotion {
 
 function isUniqueViolation(error: unknown): error is { code: string } {
   return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
+}
+
+function buildTimedOutAssistantContent(row: AgentTaskRow): string {
+  const lines = [
+    `Локальная задача не завершилась вовремя: ${row.title}.`,
+    row.summary,
+    "",
+    "Статус: timed_out",
+    `Команда: ${inlineCode(row.command)}`,
+  ];
+
+  if (row.stderr?.trim()) {
+    lines.push("", "stderr:", row.stderr.trim());
+  }
+
+  lines.push("", STALE_TASK_SERVER_NOTE);
+  return lines.join("\n");
+}
+
+function inlineCode(value: string): string {
+  return value.includes("`") ? `"${value}"` : `\`${value}\``;
 }
