@@ -1,0 +1,35 @@
+{
+  "name": "four-two-rf",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.30.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter ./packages/* --filter ./apps/* build",
+    "build:web": "pnpm --filter web build",
+    "build:api": "pnpm --filter @4-2/api build",
+    "build:contracts": "pnpm --filter @4-2/contracts build",
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter @4-2/api dev",
+    "lint": "pnpm -r --filter ./packages/* --filter ./apps/* lint",
+    "test": "pnpm -r --filter ./packages/* --filter ./apps/* test",
+    "typecheck": "pnpm -r --filter ./packages/* --filter ./apps/* typecheck",
+    "compose:config": "node scripts/compose-stack.mjs config",
+    "compose:dev": "node scripts/compose-stack.mjs up --build",
+    "compose:build-agent": "node scripts/compose-stack.mjs --profile build run --build --rm agent-builder",
+    "compose:deploy": "node scripts/deploy-stack.mjs",
+    "compose:ps": "node scripts/compose-stack.mjs ps",
+    "compose:logs": "node scripts/compose-stack.mjs logs --tail=100",
+    "compose:down": "node scripts/compose-stack.mjs down -v",
+    "agent:build": "powershell -ExecutionPolicy Bypass -File scripts/build-agent.ps1",
+    "agent:build:unix": "bash scripts/build-agent.sh"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+:root {
+  --background: #07131a;
+  --foreground: #ecf4ef;
+  --surface: rgba(7, 22, 28, 0.82);
+  --surface-strong: rgba(7, 18, 24, 0.94);
+  --console: rgba(4, 14, 18, 0.92);
+  --border: rgba(143, 201, 195, 0.18);
+  --border-soft: rgba(143, 201, 195, 0.1);
+  --ink: #f2f7f3;
+  --ink-soft: #bfd3ce;
+  --muted: #7c9a95;
+  --signal: #8cf0bf;
+  --signal-ink: #072113;
+  --panel-shadow: 0 30px 90px rgba(0, 0, 0, 0.35);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-plex-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--foreground);
+  font-family: var(--font-space-grotesk), sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(140, 240, 191, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(98, 221, 255, 0.16), transparent 24%),
+    linear-gradient(180deg, #061118 0%, #08161b 36%, #061016 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(circle at center, black 38%, transparent 82%);
+  opacity: 0.16;
+}
+
+a,
+button,
+textarea {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease;
+}
+
+button:hover,
+a:hover {
+  transform: translateY(-1px);
+}
+
+.hero-grid {
+  background:
+    linear-gradient(135deg, rgba(16, 49, 60, 0.82), rgba(4, 18, 22, 0.96)),
+    radial-gradient(circle at 78% 18%, rgba(140, 240, 191, 0.15), transparent 24%);
+  display: grid;
+  gap: 2rem;
+}
+
+@media (min-width: 980px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.8fr);
+    align-items: stretch;
+  }
+}

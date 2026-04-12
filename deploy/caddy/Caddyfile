@@ -1,0 +1,20 @@
+{$SITE_ADDRESS:http://} {
+  encode zstd gzip
+
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    Cross-Origin-Opener-Policy "same-origin"
+    -Server
+  }
+
+  handle_path /api/* {
+    reverse_proxy api:8080
+  }
+
+  handle {
+    reverse_proxy web:3000
+  }
+}
