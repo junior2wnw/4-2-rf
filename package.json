@@ -20,6 +20,7 @@
     "compose:config": "node scripts/compose-stack.mjs config",
     "compose:dev": "node scripts/compose-stack.mjs up --build",
     "compose:build-agent": "node scripts/compose-stack.mjs --profile build run --build --rm agent-builder",
+    "compose:deploy": "node scripts/deploy-stack.mjs",
     "compose:ps": "node scripts/compose-stack.mjs ps",
     "compose:logs": "node scripts/compose-stack.mjs logs --tail=100",
     "compose:down": "node scripts/compose-stack.mjs down -v",

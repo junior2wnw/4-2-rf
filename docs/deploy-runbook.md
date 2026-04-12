@@ -43,15 +43,15 @@ cd /opt/4-2-rf
 cp .env.example .env
 # заполни секреты
 node scripts/compose-stack.mjs config
-node scripts/compose-stack.mjs --profile build run --build --rm agent-builder
-node scripts/compose-stack.mjs up -d --build
+node scripts/deploy-stack.mjs
 ```
 
-Если DNS ещё не указывает на сервер, можно временно оставить `SITE_ADDRESS=:80`.
+Если DNS ещё не указывает на сервер, держи `SITE_ADDRESS=http://:80`, чтобы preview работал по обычному HTTP и Caddy не пытался получить TLS-сертификат на невалидный host.
 После прокидывания A-record поменяй `SITE_ADDRESS=4-2.рф` и перезапусти stack, чтобы Caddy получил публичный TLS.
 Если `80/443` уже заняты на shared-host, временно выставь high ports через `SITE_HTTP_PORT` и `SITE_HTTPS_PORT`, а публичные URL в `.env` укажи с этими портами.
 
 `compose-stack.mjs` запускает `docker compose` из каталога `deploy/` и всегда подхватывает корневой `.env`, поэтому interpolation и секреты не теряются.
+`compose:deploy` специально собирает `memory-sidecar`, `api` и `web` последовательно, а потом делает `up -d`, чтобы deploy не зависел от флаки параллельной BuildKit/Corepack загрузки.
 
 ## Проверка
 
@@ -70,8 +70,7 @@ curl -s http://127.0.0.1/api/readyz
 ```bash
 cd /opt/4-2-rf
 git pull --ff-only
-node scripts/compose-stack.mjs --profile build run --build --rm agent-builder
-node scripts/compose-stack.mjs up -d --build
+node scripts/deploy-stack.mjs
 ```
 
 ## Rollback

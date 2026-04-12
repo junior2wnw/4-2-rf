@@ -51,6 +51,12 @@ pnpm compose:build-agent
 pnpm compose:dev
 ```
 
+Для server/shared-host deploy используй последовательный pipeline без параллельной пересборки:
+
+```bash
+node scripts/deploy-stack.mjs
+```
+
 ## Проверки
 
 ```bash
