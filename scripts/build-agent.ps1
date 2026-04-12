@@ -66,7 +66,7 @@ foreach ($target in $targets) {
 
   $sha256 = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
   $installCommand = if ($target.Platform -eq "windows") {
-    "Expand-Archive .\$archiveName -DestinationPath `$env:LOCALAPPDATA\4-2; & `$env:LOCALAPPDATA\4-2\4-2-agent.exe install --api-url $ApiUrl --scope user --enrollment-token <token-from-site>"
+    "`$installRoot = Join-Path `$env:LOCALAPPDATA '4-2'; Expand-Archive -LiteralPath ./$archiveName -DestinationPath `$installRoot -Force; & (Join-Path `$installRoot '4-2-agent.exe') install --api-url $ApiUrl --scope user --enrollment-token <token-from-site>"
   } else {
     "tar -xzf ./$archiveName && ./4-2-agent install --api-url $ApiUrl --scope user --enrollment-token <token-from-site>"
   }
