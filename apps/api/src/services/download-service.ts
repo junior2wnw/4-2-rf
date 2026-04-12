@@ -79,7 +79,7 @@ function buildManifestItem(
     filename,
     installCommand:
       platform === "windows"
-        ? `Expand-Archive .\\${filename} -DestinationPath $env:LOCALAPPDATA\\4-2; & $env:LOCALAPPDATA\\4-2\\4-2-agent.exe install --api-url ${normalizedApiBaseUrl} --scope user --enrollment-token <token-from-site>`
+        ? `$installRoot = Join-Path $env:LOCALAPPDATA '4-2'; Expand-Archive -LiteralPath ./${filename} -DestinationPath $installRoot -Force; & (Join-Path $installRoot '4-2-agent.exe') install --api-url ${normalizedApiBaseUrl} --scope user --enrollment-token <token-from-site>`
         : `tar -xzf ./${filename} && ./4-2-agent install --api-url ${normalizedApiBaseUrl} --scope user --enrollment-token <token-from-site>`,
     sha256: sha256Hex(`fallback-${platform}-${arch}`),
     url: `${normalizedInstallerBaseUrl}/${filename}`,

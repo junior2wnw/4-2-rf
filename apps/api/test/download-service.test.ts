@@ -24,6 +24,8 @@ describe("DownloadService", () => {
         "https://example.com/api/v1/installers/4-2-agent-windows-amd64.zip",
       );
       expect(manifest.items[0]?.installCommand).toContain("--api-url https://example.com/api");
+      expect(manifest.items[0]?.installCommand).toContain("Join-Path $env:LOCALAPPDATA '4-2'");
+      expect(manifest.items[0]?.installCommand).not.toMatch(/[\u0000-\u001f]/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
