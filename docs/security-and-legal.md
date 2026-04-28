@@ -2,7 +2,7 @@
 
 TrustLink Core is for consent-based links between devices the user owns or is allowed to administer.
 
-## Product Description
+## Technology Description
 
 Use:
 
@@ -32,7 +32,7 @@ Rules:
 - reconnect rotates session keys;
 - revocation kills active and future sessions.
 
-## Production Requirements
+## Technology Hardening
 
 Before real-world deployment:
 

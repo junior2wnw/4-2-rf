@@ -62,7 +62,7 @@ Connect trusted device identities.
 
 ## Adapter Examples
 
-The kernel accepts any adapter id. A project can add adapters like:
+The kernel accepts any adapter id. A technology user can add adapters like:
 
 - `local.fast`
 - `edge.standard`

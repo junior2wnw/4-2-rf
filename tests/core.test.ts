@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createDeviceIdentity,
   LinkSpace,
+  createEnvelope,
   createStateSyncPlan,
   establishTrustedSession,
   fileChunkEnvelope,
@@ -13,7 +14,6 @@ import {
   createFileChunk,
   rankPathCandidates,
   StaticDiscoveryProvider,
-  textMessage,
   TokenBucket,
   toPublicIdentity,
   TrustStore
@@ -34,17 +34,23 @@ test("trusted devices establish matching encrypted sessions", () => {
   const aTrust = TrustStore.empty();
   const bTrust = TrustStore.empty();
 
-  aTrust.addTrustedPeer(toPublicIdentity(b), ["messages.send"], {
+  aTrust.addTrustedPeer(toPublicIdentity(b), ["data.send"], {
     accepted: true,
     approvedBy: "A:user"
   });
-  bTrust.addTrustedPeer(toPublicIdentity(a), ["messages.send"], {
+  bTrust.addTrustedPeer(toPublicIdentity(a), ["data.send"], {
     accepted: true,
     approvedBy: "B:user"
   });
 
   const { initiatorSession, responderSession } = establishTrustedSession(a, aTrust, b, bTrust);
-  const envelope = textMessage("hello trusted peer");
+  const envelope = createEnvelope({
+    channel: "data",
+    type: "sample",
+    contentType: "application/json",
+    encoding: "json",
+    payload: { ok: true }
+  });
   const frame = initiatorSession.seal(JSON.stringify(envelope), envelope.msgId);
 
   assert.equal(responderSession.openUtf8(frame, envelope.msgId), JSON.stringify(envelope));
@@ -56,11 +62,11 @@ test("revoked trust blocks future sessions", () => {
   const aTrust = TrustStore.empty();
   const bTrust = TrustStore.empty();
 
-  aTrust.addTrustedPeer(toPublicIdentity(b), ["messages.send"], {
+  aTrust.addTrustedPeer(toPublicIdentity(b), ["data.send"], {
     accepted: true,
     approvedBy: "A:user"
   });
-  bTrust.addTrustedPeer(toPublicIdentity(a), ["messages.send"], {
+  bTrust.addTrustedPeer(toPublicIdentity(a), ["data.send"], {
     accepted: true,
     approvedBy: "B:user"
   });
@@ -71,12 +77,12 @@ test("revoked trust blocks future sessions", () => {
 
 test("permission policy allows exact and resource-scoped grants", () => {
   const policy = new PermissionPolicy([
-    "messages.send",
+    "data.send",
     "api.call:/health",
     "events.subscribe:*"
   ]);
 
-  assert.equal(policy.allows({ channel: "messages", action: "send" }), true);
+  assert.equal(policy.allows({ channel: "data", action: "send" }), true);
   assert.equal(policy.allows({ channel: "api", action: "call", resource: "/health" }), true);
   assert.equal(policy.allows({ channel: "api", action: "call", resource: "/admin" }), false);
   assert.equal(policy.allows({ channel: "events", action: "subscribe", resource: "link" }), true);
@@ -133,14 +139,14 @@ test("discovery returns only matching non-expired endpoints", async () => {
       endpoint: "memory://a",
       transport: "memory.frame",
       source: "manual",
-      capabilities: ["messages"]
+      capabilities: ["envelope.v1"]
     }),
     manualEndpoint({
       peerId: "b",
       endpoint: "custom://b",
       transport: "custom.transport",
       source: "manual",
-      capabilities: ["messages"]
+      capabilities: ["envelope.v1"]
     })
   ]);
 
@@ -184,7 +190,7 @@ test("link space makes the same pair link for every member", () => {
   const c = createDeviceIdentity("C");
 
   const space = LinkSpace.create("Lab", toPublicIdentity(a), ["events.sync"]);
-  space.addMember(toPublicIdentity(b), ["messages.send"]);
+  space.addMember(toPublicIdentity(b), ["data.send"]);
   const snapshot = space.addMember(toPublicIdentity(c), ["metrics.write"]);
 
   assert.equal(snapshot.members.length, 3);

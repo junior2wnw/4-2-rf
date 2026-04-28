@@ -52,8 +52,8 @@ function runDemo(): void {
   const recovery = lordbook.recoveryFor(pocket.identity.id).snapshot();
 
   console.log(JSON.stringify({
-    product: "TrustLink Core",
-    position: "simple reliable device bridge for trusted devices",
+    technology: "TrustLink Core",
+    description: "simple reliable device bridge for trusted devices",
     devices: [
       {
         label: lordbook.identity.label,

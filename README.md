@@ -66,23 +66,23 @@ Identity
 → Audit
 ```
 
-Проект сейчас реализует technology kernel, extension points и starter-модули. Реальные сетевые transports подключаются через тот же контракт и получают только encrypted frames.
+TrustLink реализует technology kernel, extension points и starter-модули. Реальные сетевые transports подключаются через тот же контракт и получают только encrypted frames.
 
 ## Позиционирование
 
 TrustLink Core описывается через пользу и границы ответственности:
 
 - простая и надёжная связь между своими доверенными устройствами;
-- remote support с подтверждением;
+- связь между доверенными устройствами с подтверждением;
 - private device link;
-- zero-trust доступ к своим сервисам;
+- точный доступ к своим сервисам;
 - связь через нестабильные сети.
 
 Подробности: [docs/security-and-legal.md](docs/security-and-legal.md).
 
 ## Модульность
 
-Проект устроен как маленькое ядро с понятными extension points. Другие пользователи могут добавлять свои storage, discovery, transport, channel, UI и QR модули через общий `ModuleRegistry`. Starter-модули можно заменить полностью.
+TrustLink устроен как маленькое ядро с понятными extension points. Другие пользователи могут добавлять свои storage, discovery, transport, channel, UI и QR модули через общий `ModuleRegistry`. Starter-модули можно заменить полностью.
 
 Документ: [docs/modules.md](docs/modules.md).
 
