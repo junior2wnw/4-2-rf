@@ -16,8 +16,8 @@ An invite is renderer-agnostic:
 trustlink:v1:pair:<base64url stable-json signed payload>
 ```
 
-QR codes, deep links, NFC tags, short links, and local handoff screens are only
-carriers for that string.
+QR codes, deep links, NFC tags, short links, and local handoff screens can carry
+that string.
 
 ## Handshake
 
@@ -56,7 +56,7 @@ directional session keys. Reconnect means a new session.
 }
 ```
 
-Transports only move sealed frames. They do not need to know payload format.
+Transports move sealed frames and stay payload-format agnostic.
 
 ## Byte Envelope
 
@@ -79,7 +79,7 @@ Transports only move sealed frames. They do not need to know payload format.
 }
 ```
 
-`payload` is opaque. The kernel preserves it and never interprets it.
+`payload` is opaque. The kernel preserves it as bytes.
 
 ## Revocation
 

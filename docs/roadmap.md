@@ -16,12 +16,13 @@ core or move into an adapter package.
 
 - IndexedDB storage
 - SQLite storage
-- WebSocket relay transport
-- WebRTC transport
+- edge stream transport
+- direct data channel transport
 - QR renderer and scanner helpers
 - CRDT channel helpers
 - file transfer channel helpers
 
 ## Rule
 
-If a feature needs to understand application data, it is not kernel work.
+Kernel work preserves bytes, trust, sessions, delivery metadata, and recovery
+state. Format-specific behavior belongs in adapter packages.

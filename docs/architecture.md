@@ -29,8 +29,8 @@ Move opaque bytes between trusted identities over fresh encrypted sessions.
    metadata such as `contentType` and `format`.
 
 6. Link Space
-   A group is represented as a versioned context over ordinary pairwise trusted
-   links. The kernel does not need a special group transport.
+   A link space is represented as a versioned context over ordinary pairwise
+   trusted links.
 
 7. Recovery
    Checkpoints describe delivered sequence numbers, durable ids, and resumable
@@ -38,20 +38,9 @@ Move opaque bytes between trusted identities over fresh encrypted sessions.
 
 8. Ports
    Crypto, storage, discovery, and transport are interfaces. Node, browser,
-   mobile, LAN, relay, hardware, and embedded implementations live outside the
-   kernel.
-
-## Non-Goals
-
-- no UI primitives
-- no QR rendering
-- no chat semantics
-- no file semantics
-- no account system
-- no mandatory transport
-- no platform-specific private-key storage in the core path
+   mobile, hardware, and embedded implementations connect through adapters.
 
 ## Result
 
-The same kernel can sit under a PWA chat, a CRDT sync engine, a device relay,
-an IoT command channel, a game state stream, or server-to-server private pipes.
+The same kernel can sit under document sync, device control, telemetry,
+collaboration, media, embedded systems, or server-to-server private streams.

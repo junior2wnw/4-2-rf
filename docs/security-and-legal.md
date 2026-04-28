@@ -8,8 +8,8 @@ TrustLink Kernel is a security boundary, so the boundary stays small.
 - pairing requires an explicit trust record
 - handshakes fail for unknown or revoked peers
 - each session uses fresh temporary agreement keys
-- transports see sealed frames, not application payloads
-- byte payloads are not interpreted by the kernel
+- transports see sealed frames
+- byte payloads stay opaque to the kernel
 
 ## Metadata Still Visible To Transports
 
@@ -19,23 +19,22 @@ TrustLink Kernel is a security boundary, so the boundary stays small.
 - session ids
 - source and target device ids
 
-Applications that need stronger metadata privacy should add padding, batching,
-private rendezvous, or onion-style forwarding outside the kernel.
+Applications that need stronger metadata privacy can add padding, batching,
+private rendezvous, or layered forwarding through adapters.
 
 ## Invite Risk
 
-A pairing invite is a signed offer, not automatic trust. A stolen invite can be
-presented before expiration, but the accepting device still decides whether to
+A pairing invite is a signed offer. The accepting device decides whether to
 store trust.
 
-## Production Requirements
+## Hardening Checklist
 
-Before handling sensitive real data, a product should add:
+Before handling sensitive real data, higher-level systems should add:
 
 - platform-backed private-key storage
 - threat-model review
 - protocol test vectors
 - decoder fuzzing
 - replay and reordering tests
-- rate limits on public relays
+- rate limits on public endpoints
 - revocation propagation policy

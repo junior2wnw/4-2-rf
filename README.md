@@ -3,8 +3,7 @@
 TrustLink Kernel is a small universal core for consent-based encrypted byte
 streams between trusted identities.
 
-It is not a chat framework, a file system, a PWA toolkit, or a transport
-library. It is the narrow layer that lets any product safely answer:
+It is the narrow technology layer that lets higher-level systems answer:
 
 ```text
 Who am I?
@@ -18,7 +17,7 @@ Everything above that line is an adapter.
 
 ## Kernel Boundary
 
-Inside the kernel:
+Kernel scope:
 
 - device identity
 - public trust records
@@ -30,17 +29,17 @@ Inside the kernel:
 - delivery and recovery metadata
 - transport, storage, and crypto ports
 
-Outside the kernel:
+Adapter scope:
 
 - UI
 - QR rendering
-- WebSocket, WebRTC, QUIC, BLE, USB, or LAN implementations
-- chat, files, RPC, CRDT, video, telemetry, and app protocols
+- concrete transport implementations
+- application channels and protocols
 - IndexedDB, SQLite, Keychain, TPM, or cloud storage implementations
 
 ## Payload Rule
 
-The kernel never interprets application payloads.
+Application payloads stay opaque to the kernel.
 
 ```ts
 const envelope = createByteEnvelope({
@@ -53,7 +52,7 @@ const envelope = createByteEnvelope({
 ```
 
 `format` and `contentType` are routing metadata for the application. The kernel
-only validates the envelope, encrypts bytes, opens bytes, and preserves delivery
+validates the envelope, encrypts bytes, opens bytes, and preserves delivery
 metadata.
 
 ## Quick Start
@@ -61,7 +60,6 @@ metadata.
 ```bash
 pnpm install
 pnpm check
-pnpm demo
 pnpm doctor
 ```
 
@@ -120,11 +118,11 @@ const opened = await responderSession.open(sealed);
 - Every session uses fresh agreement keys.
 - Transports move sealed frames only.
 - Payloads are opaque bytes.
-- Delivery semantics are metadata, not app behavior.
-- Platform specifics are ports, not kernel dependencies.
+- Delivery semantics are metadata.
+- Platform specifics are ports.
 
 ## Status
 
 This branch is the cleaned kernel shape. The included Node crypto provider is a
-reference adapter for tests, demos, and server-side usage. Browser, mobile, and
-hardware-backed providers should implement the same `TrustLinkCrypto` port.
+reference adapter for tests and server-side usage. Browser, mobile, and
+hardware-backed providers can implement the same `TrustLinkCrypto` port.

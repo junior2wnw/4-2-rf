@@ -25,5 +25,5 @@ This keeps the technology simple:
 - one member can be removed cleanly
 - the application can sync one shared state over many pairwise paths
 
-The kernel does not decide whether the shared state is text, CRDT updates,
-binary chunks, game state, or telemetry.
+The shared state format belongs to the application layer: text, CRDT updates,
+binary chunks, game state, telemetry, or another byte format.

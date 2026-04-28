@@ -1,6 +1,6 @@
 # Ports And Adapters
 
-The kernel exposes ports. Products provide adapters.
+The kernel exposes ports. Higher-level systems provide adapters.
 
 ## Crypto
 
@@ -26,19 +26,19 @@ Storage adapters persist:
 - recovery checkpoints
 - durable outbox data
 
-The kernel does not choose IndexedDB, SQLite, Keychain, filesystem, TPM, or a
-cloud database.
+Storage choices stay in adapters: IndexedDB, SQLite, Keychain, filesystem, TPM,
+or cloud databases.
 
 ## Transport
 
 A transport adapter connects to an endpoint and sends sealed frames.
 
-Possible adapters:
+Adapter examples:
 
-- WebSocket relay
-- WebRTC data channel
-- QUIC
-- LAN discovery
+- edge stream
+- direct data channel
+- datagram transport
+- local discovery
 - BLE
 - USB
 - local process pipe
@@ -47,5 +47,5 @@ All of them move the same sealed frame shape.
 
 ## Application Channels
 
-Chat, files, RPC, CRDT, presence, cursors, telemetry, and streaming media are
-application channels over byte envelopes. They do not belong in the kernel.
+Application channels use byte envelopes for their own formats: RPC, CRDT,
+presence, cursors, telemetry, streaming media, and custom protocols.
