@@ -14,6 +14,9 @@
 - State sync plan.
 - Rate-limit primitive for exposed services.
 - Technical audit events without payload.
+- Module registry.
+- UI contract.
+- QR invite renderer.
 
 ## Next
 

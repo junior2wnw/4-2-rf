@@ -44,6 +44,9 @@ Connect trusted device identities.
 12. Audit
    Logs events such as pairing, selected path, denied permission, reconnect, and revocation without recording payload.
 
+13. Module Registry
+   Storage, discovery, transports, channels, UI adapters, QR renderers, and tools connect through one registry.
+
 ## Design Decisions
 
 - Every action is checked through permissions.
