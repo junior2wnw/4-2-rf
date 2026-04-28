@@ -1,0 +1,36 @@
+{
+  "name": "trustlink-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A simple, reliable, consent-based device link core for trusted devices.",
+  "bin": {
+    "trustlink": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "demo": "pnpm build && node dist/cli.js demo",
+    "dev": "node --import tsx src/cli.ts demo",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "device-link",
+    "pairing",
+    "trust",
+    "quic",
+    "e2e",
+    "multiplexing"
+  ],
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
