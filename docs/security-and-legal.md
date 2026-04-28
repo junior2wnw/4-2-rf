@@ -1,60 +1,41 @@
-# Security And Legal Notes
+# Security Notes
 
-TrustLink Core is for consent-based links between devices the user owns or is allowed to administer.
+TrustLink Kernel is a security boundary, so the boundary stays small.
 
-## Technology Description
+## Guarantees The Kernel Tries To Provide
 
-Use:
+- device identity is pinned to a public signing key
+- pairing requires an explicit trust record
+- handshakes fail for unknown or revoked peers
+- each session uses fresh temporary agreement keys
+- transports see sealed frames, not application payloads
+- byte payloads are not interpreted by the kernel
 
-- simple reliable device bridge;
-- trusted device link;
-- consent-based pairing;
-- explicit permissions;
-- local-first connection;
-- reconnect through unstable networks.
+## Metadata Still Visible To Transports
 
-## Security Model
+- timing
+- frame sizes
+- endpoint ids chosen by the application
+- session ids
+- source and target device ids
 
-TrustLink uses standard primitives:
+Applications that need stronger metadata privacy should add padding, batching,
+private rendezvous, or onion-style forwarding outside the kernel.
 
-- Ed25519 for device identity signatures.
-- X25519 for session key agreement.
-- HKDF-SHA256 for key derivation.
-- ChaCha20-Poly1305 for frame encryption.
-- SHA-256 for ids and transcript hashes.
+## Invite Risk
 
-Rules:
+A pairing invite is a signed offer, not automatic trust. A stolen invite can be
+presented before expiration, but the accepting device still decides whether to
+store trust.
 
-- private keys stay on the device;
-- discovery candidates must prove their identity key;
-- forwarding services move encrypted frames only;
-- permissions are checked per action;
-- reconnect rotates session keys;
-- revocation kills active and future sessions.
+## Production Requirements
 
-## Technology Hardening
+Before handling sensitive real data, a product should add:
 
-Before real-world deployment:
-
-- external cryptographic review;
-- transport adapter review;
-- OS keychain or TPM-backed private key storage;
-- fuzzing for frame and envelope parsing;
-- SQLite or equivalent atomic trust store;
-- abuse-rate limits on public service surfaces;
-- privacy review for metadata retention;
-- clear user-facing consent and revocation flow.
-
-## Data Logging
-
-Audit logs should include technical events only:
-
-- peer connected;
-- peer disconnected;
-- permission denied;
-- forwarding path used;
-- transfer completed;
-- policy changed;
-- device revoked.
-
-Payload, private keys, session keys, file content, clipboard content, and command output stay outside default audit logs.
+- platform-backed private-key storage
+- threat-model review
+- protocol test vectors
+- decoder fuzzing
+- replay and reordering tests
+- rate limits on public relays
+- revocation propagation policy

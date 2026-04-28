@@ -1,93 +1,53 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  TrustStore,
   acceptPairingInvite,
   createDeviceIdentity,
-  createHeadlessUiBridge,
-  createKernelModule,
   createPairingInvite,
-  createStarterModule,
-  decodePairingInvite,
-  encodePairingInvite,
-  FileTransferService,
-  renderPairingQr,
-  TrustLinkApp,
-  TrustStore,
+  parsePairingInvite,
+  pairingInviteSummary,
+  serializePairingInvite,
   verifyPairingInvite
 } from "../src/index.js";
+import { NodeTrustLinkCrypto } from "../src/platform/node-crypto.js";
 
-test("kernel module stays minimal and starter module adds optional adapters", async () => {
-  const app = await TrustLinkApp.create({
-    label: "A",
-    modules: [createKernelModule(), createStarterModule()]
-  });
+const crypto = new NodeTrustLinkCrypto();
 
-  const adapters = app.modules.adapters();
-
-  assert.deepEqual(app.modules.listModules().map((module) => module.id), [
-    "trustlink.kernel",
-    "trustlink.starter"
-  ]);
-  assert.deepEqual(adapters.channelAdapters.map((adapter) => adapter.channel), ["messages", "files"]);
-  assert.equal(adapters.qrRenderers.length, 1);
-  assert.equal(adapters.keyStores.length, 1);
-});
-
-test("pairing invite round trip creates a trust record", () => {
-  const a = createDeviceIdentity("A");
+test("pairing invite round trip creates a trust record", async () => {
+  const a = await createDeviceIdentity(crypto, "A");
   const bTrust = TrustStore.empty();
-  const invite = createPairingInvite(a, {
-    requestedPermissions: ["messages.send"],
-    offeredPermissions: ["messages.send", "files.send"]
+  const invite = await createPairingInvite(crypto, a, {
+    requestedPermissions: ["stream.write"],
+    offeredPermissions: ["stream.write", "stream.read"]
   });
 
-  const decoded = decodePairingInvite(encodePairingInvite(invite));
-  const record = acceptPairingInvite(bTrust, decoded, {
+  const decoded = parsePairingInvite(serializePairingInvite(invite));
+  const record = await acceptPairingInvite(crypto, bTrust, decoded, {
     approvedBy: "B:user"
   });
 
-  assert.equal(verifyPairingInvite(decoded), true);
+  assert.equal(await verifyPairingInvite(crypto, decoded), true);
   assert.equal(record.peer.id, a.id);
-  assert.deepEqual(record.permissions, ["files.send", "messages.send"]);
+  assert.deepEqual(record.permissions, ["stream.read", "stream.write"]);
 });
 
-test("qr renderer creates svg content for pairing invite", async () => {
-  const identity = createDeviceIdentity("A");
-  const invite = createPairingInvite(identity, {
-    requestedPermissions: ["messages.send"],
-    offeredPermissions: ["messages.send"]
+test("pairing summary is display-safe and renderer-agnostic", async () => {
+  const identity = await createDeviceIdentity(crypto, "A");
+  const invite = await createPairingInvite(crypto, identity, {
+    requestedPermissions: ["stream.write"],
+    offeredPermissions: ["stream.write"]
   });
 
-  const qr = await renderPairingQr(invite, undefined, { format: "svg" });
+  const summary = pairingInviteSummary(invite);
 
-  assert.equal(qr.contentType, "image/svg+xml");
-  assert.match(qr.body, /<svg/);
+  assert.equal(summary.from, "A");
+  assert.equal(typeof summary.fingerprint, "string");
+  assert.ok(serializePairingInvite(invite).startsWith("trustlink:v1:pair:"));
 });
 
-test("headless ui bridge publishes state and events", () => {
-  const bridge = createHeadlessUiBridge({
-    device: { id: "a", label: "A", fingerprint: "AAAA" },
-    peers: [],
-    connections: []
-  });
-  const events: string[] = [];
-
-  bridge.subscribe((event) => events.push(event.type));
-  bridge.emit({ type: "notice", level: "success", message: "ready" });
-  bridge.setState({
-    device: { id: "a", label: "A", fingerprint: "AAAA" },
-    peers: [],
-    connections: [{ peerId: "b", state: "CONNECTED" }]
-  });
-
-  assert.deepEqual(events, ["notice", "state.changed"]);
-});
-
-test("file transfer service prepares resumable chunks", () => {
-  const service = new FileTransferService();
-  const prepared = service.prepareBuffer("hello.txt", Buffer.from("hello world"), 5);
-
-  assert.equal(prepared.plan.totalChunks, 3);
-  assert.equal(prepared.chunks[0]?.delivery.resume, true);
-  assert.deepEqual(service.missing(prepared.plan, [0, 2]), [1]);
+test("kernel index is platform-neutral", async () => {
+  const module = await import("../src/index.js");
+  assert.equal("NodeTrustLinkCrypto" in module, false);
+  assert.equal("createByteEnvelope" in module, true);
 });

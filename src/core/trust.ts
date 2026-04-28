@@ -51,7 +51,6 @@ export class TrustStore {
 
     const now = nowIso();
     const existing = this.records.get(peer.id);
-    const version = existing ? existing.version + 1 : 1;
     const note = options.note ?? consent.note;
     const record: TrustRecord = {
       peer,
@@ -59,7 +58,7 @@ export class TrustStore {
       permissions: new PermissionPolicy(permissions).list(),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      version,
+      version: existing ? existing.version + 1 : 1,
       ...(options.expiresAt ? { expiresAt: options.expiresAt } : {}),
       approvedBy: consent.approvedBy,
       ...(note !== undefined ? { note } : {})
@@ -92,25 +91,21 @@ export class TrustStore {
   }
 
   allows(peerId: string, request: PermissionRequest): boolean {
-    const record = this.requireTrusted(peerId);
-    return new PermissionPolicy(record.permissions).allows(request);
+    return new PermissionPolicy(this.requireTrusted(peerId).permissions).allows(request);
   }
 
   requirePermission(peerId: string, request: PermissionRequest): void {
-    const record = this.requireTrusted(peerId);
-    new PermissionPolicy(record.permissions).require(request);
+    new PermissionPolicy(this.requireTrusted(peerId).permissions).require(request);
   }
 
   revoke(peerId: string, note?: string): TrustRecord {
     const record = this.requireTrusted(peerId);
-    const { note: existingNote, ...rest } = record;
-    const nextNote = note ?? existingNote;
     const revoked: TrustRecord = {
-      ...rest,
+      ...record,
       state: "revoked",
       updatedAt: nowIso(),
       version: record.version + 1,
-      ...(nextNote !== undefined ? { note: nextNote } : {})
+      ...(note !== undefined ? { note } : record.note !== undefined ? { note: record.note } : {})
     };
     this.records.set(peerId, revoked);
     return revoked;

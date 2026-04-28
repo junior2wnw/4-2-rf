@@ -3,101 +3,89 @@
 ## Pairing
 
 ```text
-Device A finds Device B.
-Device A requests a link.
-Device B shows a local approval prompt.
-Device B stores A public key and permissions.
-Device A stores B public key and permissions.
-Future sessions can reconnect without repeating pairing.
+A creates a signed invite.
+B verifies A identity and invite signature.
+B stores A as trusted after local consent.
+A stores B as trusted through its own consent path.
+Future sessions reconnect without repeating pairing.
 ```
 
-Pairing creates a trust record:
-
-```json
-{
-  "peer": "public device identity",
-  "state": "trusted",
-  "permissions": ["data.send", "events.sync"],
-  "version": 1,
-  "createdAt": "iso-time"
-}
-```
-
-## Session Handshake
+An invite is renderer-agnostic:
 
 ```text
-HELLO
-→ capabilities
-→ temporary X25519 public key
-→ signed identity proof
-→ pinned trust check
-→ permission snapshot
-→ session keys
-→ READY
+trustlink:v1:pair:<base64url stable-json signed payload>
 ```
 
-The permanent Ed25519 key proves identity. Session data uses temporary X25519-derived keys.
+QR codes, deep links, NFC tags, short links, and local handoff screens are only
+carriers for that string.
 
-The temporary X25519 key creates a fresh shared secret for this session. Reconnect means a new session.
+## Handshake
 
-## Envelope
+```text
+offer:
+  permanent public identity
+  temporary agreement public key
+  capabilities
+  crypto suite
+  identity signature
+
+answer:
+  permanent public identity
+  temporary agreement public key
+  offer hash
+  capabilities
+  crypto suite
+  identity signature
+```
+
+The permanent key proves identity. The temporary agreement key creates fresh
+directional session keys. Reconnect means a new session.
+
+## Sealed Frame
 
 ```json
 {
   "v": 1,
-  "msgId": "msg_...",
-  "streamId": "str_...",
-  "channel": "data",
-  "type": "frame",
-  "contentType": "application/octet-stream",
-  "encoding": "base64url",
-  "delivery": {
-    "mode": "reliable",
-    "ack": true,
-    "resume": true,
-    "idempotencyKey": "transfer:7"
-  },
-  "meta": {
-    "schema": "custom"
-  },
-  "payload": "..."
+  "sessionId": "ses_...",
+  "fromDeviceId": "dev_...",
+  "toDeviceId": "dev_...",
+  "seq": 1,
+  "nonce": "...",
+  "ciphertext": "...",
+  "tag": "..."
 }
 ```
 
-## Delivery Modes
+Transports only move sealed frames. They do not need to know payload format.
 
-- `reliable`: files, JSON, commands.
-- `ordered`: shell-like command streams and ordered APIs.
-- `unordered`: telemetry.
-- `latest_only`: screen, sensor, and video state.
-- `durable`: important events that can replay after reconnect.
-- `at_most_once`: single send attempt.
-- `at_least_once`: retry, receiver handles duplicates.
-- `exactly_once`: idempotency key required.
+## Byte Envelope
+
+```json
+{
+  "v": 1,
+  "envelopeId": "env_...",
+  "streamId": "shared-doc",
+  "seq": 7,
+  "contentType": "application/octet-stream",
+  "format": "yjs/update-v1",
+  "delivery": {
+    "mode": "reliable",
+    "ack": true,
+    "resume": false
+  },
+  "meta": {},
+  "payload": "base64url-bytes",
+  "createdAt": "iso-time"
+}
+```
+
+`payload` is opaque. The kernel preserves it and never interprets it.
 
 ## Revocation
 
 ```text
 trust record revoked
-peer public key blocked
-active sessions stopped
-future reconnect denied
-optional revocation pushed to other trusted devices
-```
-
-## Link Space
-
-```text
-one link context
-many trusted devices
-same pairwise link model
-one versioned snapshot
-```
-
-For three devices, the space contains three ordinary pairs:
-
-```text
-A <-> B
-A <-> C
-B <-> C
+active sessions stopped by the application
+future handshakes fail
+optional signed revocation event is transported by the application
 ```

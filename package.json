@@ -1,9 +1,13 @@
 {
-  "name": "trustlink-core",
+  "name": "trustlink-kernel",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A simple, reliable, consent-based device link core for trusted devices.",
+  "description": "A small universal kernel for consent-based encrypted byte streams between trusted identities.",
+  "exports": {
+    ".": "./dist/index.js",
+    "./platform/node": "./dist/platform/node-crypto.js"
+  },
   "bin": {
     "trustlink": "./dist/cli.js"
   },
@@ -18,27 +22,20 @@
     "dev": "node --import tsx src/cli.ts demo",
     "doctor": "pnpm build && node dist/cli.js doctor",
     "language": "node --import tsx scripts/check-language.ts",
-    "modules": "pnpm build && node dist/cli.js modules",
-    "pair:qr": "pnpm build && node dist/cli.js pair:qr",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "keywords": [
-    "device-link",
+    "byte-stream",
     "pairing",
     "trust",
-    "quic",
     "e2e",
-    "multiplexing"
+    "transport-agnostic"
   ],
   "license": "UNLICENSED",
   "devDependencies": {
     "@types/node": "^22.15.0",
-    "@types/qrcode": "^1.5.6",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "qrcode": "^1.5.4"
   }
 }

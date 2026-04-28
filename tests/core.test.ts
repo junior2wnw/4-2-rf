@@ -1,101 +1,99 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createDeviceIdentity,
   LinkSpace,
-  createEnvelope,
+  TrustStore,
+  byteEnvelopePayload,
+  createByteEnvelope,
+  createDeviceIdentity,
   createStateSyncPlan,
   establishTrustedSession,
-  fileChunkEnvelope,
-  missingChunks,
   manualEndpoint,
   PermissionPolicy,
-  planFileTransfer,
-  createFileChunk,
   rankPathCandidates,
   StaticDiscoveryProvider,
   TokenBucket,
-  toPublicIdentity,
-  TrustStore
+  toPublicIdentity
 } from "../src/index.js";
+import { NodeTrustLinkCrypto } from "../src/platform/node-crypto.js";
+import { readUtf8, utf8 } from "../src/utils/encoding.js";
 
-test("pairing requires explicit trust before a session can start", () => {
-  const a = createDeviceIdentity("A");
-  const b = createDeviceIdentity("B");
+const crypto = new NodeTrustLinkCrypto();
+
+test("pairing requires explicit trust before a session can start", async () => {
+  const a = await createDeviceIdentity(crypto, "A");
+  const b = await createDeviceIdentity(crypto, "B");
   const aTrust = TrustStore.empty();
   const bTrust = TrustStore.empty();
 
-  assert.throws(() => establishTrustedSession(a, aTrust, b, bTrust), /Unknown peer/);
+  await assert.rejects(() => establishTrustedSession(crypto, a, aTrust, b, bTrust), /Unknown peer/);
 });
 
-test("trusted devices establish matching encrypted sessions", () => {
-  const a = createDeviceIdentity("A");
-  const b = createDeviceIdentity("B");
+test("trusted devices exchange arbitrary encrypted bytes", async () => {
+  const a = await createDeviceIdentity(crypto, "A");
+  const b = await createDeviceIdentity(crypto, "B");
   const aTrust = TrustStore.empty();
   const bTrust = TrustStore.empty();
 
-  aTrust.addTrustedPeer(toPublicIdentity(b), ["data.send"], {
+  aTrust.addTrustedPeer(toPublicIdentity(b), ["stream.write"], {
     accepted: true,
     approvedBy: "A:user"
   });
-  bTrust.addTrustedPeer(toPublicIdentity(a), ["data.send"], {
+  bTrust.addTrustedPeer(toPublicIdentity(a), ["stream.write"], {
     accepted: true,
     approvedBy: "B:user"
   });
 
-  const { initiatorSession, responderSession } = establishTrustedSession(a, aTrust, b, bTrust);
-  const envelope = createEnvelope({
-    channel: "data",
-    type: "sample",
-    contentType: "application/json",
-    encoding: "json",
-    payload: { ok: true }
-  });
-  const frame = initiatorSession.seal(JSON.stringify(envelope), envelope.msgId);
+  const { initiatorSession, responderSession } = await establishTrustedSession(crypto, a, aTrust, b, bTrust);
+  const payload = new Uint8Array([0, 1, 2, 253, 254, 255]);
+  const frame = await initiatorSession.seal(payload, utf8("binary-demo"));
 
-  assert.equal(responderSession.openUtf8(frame, envelope.msgId), JSON.stringify(envelope));
+  assert.deepEqual(await responderSession.open(frame, utf8("binary-demo")), payload);
 });
 
-test("revoked trust blocks future sessions", () => {
-  const a = createDeviceIdentity("A");
-  const b = createDeviceIdentity("B");
+test("revoked trust blocks future sessions", async () => {
+  const a = await createDeviceIdentity(crypto, "A");
+  const b = await createDeviceIdentity(crypto, "B");
   const aTrust = TrustStore.empty();
   const bTrust = TrustStore.empty();
 
-  aTrust.addTrustedPeer(toPublicIdentity(b), ["data.send"], {
+  aTrust.addTrustedPeer(toPublicIdentity(b), ["stream.write"], {
     accepted: true,
     approvedBy: "A:user"
   });
-  bTrust.addTrustedPeer(toPublicIdentity(a), ["data.send"], {
+  bTrust.addTrustedPeer(toPublicIdentity(a), ["stream.write"], {
     accepted: true,
     approvedBy: "B:user"
   });
   bTrust.revoke(a.id);
 
-  assert.throws(() => establishTrustedSession(a, aTrust, b, bTrust), /trust is inactive/);
+  await assert.rejects(() => establishTrustedSession(crypto, a, aTrust, b, bTrust), /trust is inactive/);
 });
 
 test("permission policy allows exact and resource-scoped grants", () => {
   const policy = new PermissionPolicy([
-    "data.send",
+    "stream.write",
     "api.call:/health",
     "events.subscribe:*"
   ]);
 
-  assert.equal(policy.allows({ channel: "data", action: "send" }), true);
+  assert.equal(policy.allows({ channel: "stream", action: "write" }), true);
   assert.equal(policy.allows({ channel: "api", action: "call", resource: "/health" }), true);
   assert.equal(policy.allows({ channel: "api", action: "call", resource: "/admin" }), false);
   assert.equal(policy.allows({ channel: "events", action: "subscribe", resource: "link" }), true);
 });
 
-test("file chunks carry resume metadata", () => {
-  const plan = planFileTransfer("transfer_1", "data.bin", 10, 4);
-  const chunk = createFileChunk(plan, 1, Buffer.from("test"));
-  const envelope = fileChunkEnvelope(chunk);
+test("byte envelopes preserve format metadata without understanding payloads", () => {
+  const envelope = createByteEnvelope({
+    streamId: "crdt-doc",
+    seq: 7,
+    contentType: "application/octet-stream",
+    format: "yjs/update-v1",
+    payload: utf8("opaque update")
+  });
 
-  assert.equal(plan.totalChunks, 3);
-  assert.equal(envelope.delivery.resume, true);
-  assert.deepEqual(missingChunks(plan.totalChunks, [0, 2]), [1]);
+  assert.equal(envelope.format, "yjs/update-v1");
+  assert.equal(readUtf8(byteEnvelopePayload(envelope)), "opaque update");
 });
 
 test("path engine prefers local low-latency paths", () => {
@@ -139,14 +137,14 @@ test("discovery returns only matching non-expired endpoints", async () => {
       endpoint: "memory://a",
       transport: "memory.frame",
       source: "manual",
-      capabilities: ["envelope.v1"]
+      capabilities: ["trustlink.stream.v1"]
     }),
     manualEndpoint({
       peerId: "b",
       endpoint: "custom://b",
       transport: "custom.transport",
       source: "manual",
-      capabilities: ["envelope.v1"]
+      capabilities: ["trustlink.stream.v1"]
     })
   ]);
 
@@ -184,14 +182,14 @@ test("token bucket denies bursts above capacity", () => {
   assert.equal(bucket.take().allowed, false);
 });
 
-test("link space makes the same pair link for every member", () => {
-  const a = createDeviceIdentity("A");
-  const b = createDeviceIdentity("B");
-  const c = createDeviceIdentity("C");
+test("link space keeps every member as ordinary trusted pairs", async () => {
+  const a = await createDeviceIdentity(crypto, "A");
+  const b = await createDeviceIdentity(crypto, "B");
+  const c = await createDeviceIdentity(crypto, "C");
 
-  const space = LinkSpace.create("Lab", toPublicIdentity(a), ["events.sync"]);
-  space.addMember(toPublicIdentity(b), ["data.send"]);
-  const snapshot = space.addMember(toPublicIdentity(c), ["metrics.write"]);
+  const space = LinkSpace.create("Lab", toPublicIdentity(a), ["stream.read"]);
+  space.addMember(toPublicIdentity(b), ["stream.write"]);
+  const snapshot = space.addMember(toPublicIdentity(c), ["stream.write"]);
 
   assert.equal(snapshot.members.length, 3);
   assert.equal(snapshot.pairs.length, 3);

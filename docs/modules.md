@@ -1,93 +1,51 @@
-# Modules
+# Ports And Adapters
 
-TrustLink Core is built as a small kernel with extension points. The kernel stays small; modules carry concrete behavior.
+The kernel exposes ports. Products provide adapters.
 
-Users can add modules for:
+## Crypto
 
-- key storage;
-- trust storage;
-- discovery providers;
-- transport adapters;
-- channel adapters;
-- UI adapters;
-- QR renderers;
-- policy tools.
+`TrustLinkCrypto` owns:
 
-## Module Shape
+- random bytes
+- hashing
+- signing and verification
+- temporary agreement keys
+- key derivation
+- authenticated encryption
 
-```ts
-import { defineTrustLinkModule } from "trustlink-core";
+The included Node provider is a reference adapter. Browser, native mobile,
+hardware-backed, and embedded providers should implement the same interface.
 
-export const myModule = defineTrustLinkModule({
-  manifest: {
-    id: "example.module",
-    name: "Example Module",
-    version: "1.0.0",
-    kind: "tool",
-    description: "Adds one custom capability.",
-    capabilities: ["example"]
-  },
-  setup(context) {
-    context.log("module ready");
-  }
-});
-```
+## Storage
 
-## App Setup
+Storage adapters persist:
 
-```ts
-import { TrustLinkApp, createKernelModule, createStarterModule } from "trustlink-core";
+- local identity
+- trust records
+- link spaces
+- recovery checkpoints
+- durable outbox data
 
-const app = await TrustLinkApp.create({
-  label: "Laptop",
-  modules: [
-    createKernelModule(),
-    createStarterModule()
-  ]
-});
+The kernel does not choose IndexedDB, SQLite, Keychain, filesystem, TPM, or a
+cloud database.
 
-console.log(app.modules.listModules());
-```
+## Transport
 
-## UI Adapter
+A transport adapter connects to an endpoint and sends sealed frames.
 
-Any UI can mount the same `UiApi`: web, desktop, mobile, terminal, service panel, or another app.
+Possible adapters:
 
-```ts
-const uiAdapter = {
-  id: "web-ui",
-  mount(api) {
-    api.subscribe((event) => {
-      console.log(event.type);
-    });
-  }
-};
-```
+- WebSocket relay
+- WebRTC data channel
+- QUIC
+- LAN discovery
+- BLE
+- USB
+- local process pipe
 
-The UI talks through commands and events. The core stays independent from React, Vue, Electron, mobile frameworks, and terminal tools.
+All of them move the same sealed frame shape.
 
-## QR Module
+## Application Channels
 
-Pairing invites can be rendered as SVG, terminal output, or data URL.
-
-```ts
-const invite = createPairingInvite(identity, {
-  requestedPermissions: ["messages.send"],
-  offeredPermissions: ["messages.send", "files.send"]
-});
-
-const qr = await renderPairingQr(invite, undefined, { format: "svg" });
-```
-
-## Link Space
-
-`LinkSpace` keeps one shared context for two or more devices. It stays simple: every participant is connected through the same pairwise model used by two devices.
-
-```ts
-const space = LinkSpace.create("My Link", toPublicIdentity(a), ["data.send"]);
-
-space.addMember(toPublicIdentity(b), ["data.send"]);
-space.addMember(toPublicIdentity(c), ["events.sync"]);
-
-console.log(space.snapshot().pairs);
-```
+Chat, files, RPC, CRDT, presence, cursors, telemetry, and streaming media are
+application channels over byte envelopes. They do not belong in the kernel.

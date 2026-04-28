@@ -1,4 +1,14 @@
-import { DeviceIdentity, PublicDeviceIdentity, SignedPayload, assertPublicIdentity, signPayload, toPublicIdentity, verifySignedPayload } from "../core/identity.js";
+import {
+  DeviceIdentity,
+  PublicDeviceIdentity,
+  SignedPayload,
+  assertPublicIdentity,
+  signPayload,
+  toPublicIdentity,
+  verifyPublicIdentity,
+  verifySignedPayload
+} from "../core/identity.js";
+import { TrustLinkCrypto } from "../core/crypto.js";
 import { TrustRecord, TrustStore } from "../core/trust.js";
 import { fromBase64Url, nowIso, randomId, readUtf8, stableJson, toBase64Url, utf8 } from "../utils/encoding.js";
 
@@ -30,10 +40,11 @@ export interface AcceptPairingOptions {
   readonly permissionsOverride?: readonly string[];
 }
 
-export function createPairingInvite(
+export async function createPairingInvite(
+  crypto: TrustLinkCrypto,
   identity: DeviceIdentity,
   options: PairingInviteOptions
-): PairingInvite {
+): Promise<PairingInvite> {
   const ttlMs = options.ttlMs ?? 10 * 60 * 1000;
   const createdAt = nowIso();
   const payload: PairingInvitePayload = {
@@ -43,32 +54,34 @@ export function createPairingInvite(
     from: toPublicIdentity(identity),
     requestedPermissions: [...options.requestedPermissions].sort(),
     offeredPermissions: [...options.offeredPermissions].sort(),
-    capabilities: [...(options.capabilities ?? ["envelope.v1", "streams.v1"])].sort(),
+    capabilities: [...(options.capabilities ?? ["trustlink.stream.v1"])].sort(),
     createdAt,
     expiresAt: new Date(Date.now() + ttlMs).toISOString(),
     nonce: randomId("nonce")
   };
 
-  return signPayload(identity, payload);
+  return signPayload(crypto, identity, payload);
 }
 
-export function encodePairingInvite(invite: PairingInvite): string {
-  return `trustlink://pair?invite=${toBase64Url(stableJson(invite))}`;
+export function serializePairingInvite(invite: PairingInvite): string {
+  return `trustlink:v1:pair:${toBase64Url(utf8(stableJson(invite)))}`;
 }
 
-export function decodePairingInvite(value: string): PairingInvite {
-  const inviteParam = value.startsWith("trustlink://")
-    ? new URL(value).searchParams.get("invite")
+export function parsePairingInvite(value: string): PairingInvite {
+  const encoded = value.startsWith("trustlink:v1:pair:")
+    ? value.slice("trustlink:v1:pair:".length)
     : value;
-
-  if (!inviteParam) {
+  if (!encoded) {
     throw new Error("Pairing invite payload missing");
   }
-
-  return JSON.parse(readUtf8(fromBase64Url(inviteParam))) as PairingInvite;
+  return JSON.parse(readUtf8(fromBase64Url(encoded))) as PairingInvite;
 }
 
-export function verifyPairingInvite(invite: PairingInvite, at = Date.now()): boolean {
+export async function verifyPairingInvite(
+  crypto: TrustLinkCrypto,
+  invite: PairingInvite,
+  at = Date.now()
+): Promise<boolean> {
   assertPublicIdentity(invite.payload.from);
   if (invite.payload.v !== 1 || invite.payload.kind !== "trustlink.pairing.invite") {
     return false;
@@ -76,15 +89,19 @@ export function verifyPairingInvite(invite: PairingInvite, at = Date.now()): boo
   if (Date.parse(invite.payload.expiresAt) <= at) {
     return false;
   }
-  return verifySignedPayload(invite.payload.from.publicKeyPem, invite);
+  if (!(await verifyPublicIdentity(crypto, invite.payload.from))) {
+    return false;
+  }
+  return verifySignedPayload(crypto, invite.payload.from.publicKey, invite);
 }
 
-export function acceptPairingInvite(
+export async function acceptPairingInvite(
+  crypto: TrustLinkCrypto,
   localTrustStore: TrustStore,
   invite: PairingInvite,
   options: AcceptPairingOptions
-): TrustRecord {
-  if (!verifyPairingInvite(invite)) {
+): Promise<TrustRecord> {
+  if (!(await verifyPairingInvite(crypto, invite))) {
     throw new Error("Pairing invite verification failed");
   }
 

@@ -1,82 +1,110 @@
-import {
-  createPrivateKey,
-  createPublicKey,
-  generateKeyPairSync,
-  sign,
-  verify
-} from "node:crypto";
-import { sha256Base64Url, shortFingerprint, stableJson, toBase64Url, utf8, nowIso } from "../utils/encoding.js";
+import { TrustLinkCrypto } from "./crypto.js";
+import { nowIso, shortFingerprint, stableJsonBytes, toBase64Url, fromBase64Url } from "../utils/encoding.js";
 
 export interface PublicDeviceIdentity {
   readonly id: string;
   readonly label: string;
-  readonly publicKeyPem: string;
+  readonly publicKey: string;
+  readonly keyAlgorithm: string;
   readonly fingerprint: string;
   readonly createdAt: string;
 }
 
 export interface DeviceIdentity extends PublicDeviceIdentity {
-  readonly privateKeyPem: string;
+  readonly privateKey: string;
 }
 
-export interface SignedPayload<T> {
-  readonly payload: T;
+export interface SignedPayload<TPayload> {
+  readonly payload: TPayload;
   readonly signature: string;
+  readonly algorithm: string;
 }
 
-export function createDeviceIdentity(label: string): DeviceIdentity {
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519", {
-    publicKeyEncoding: { type: "spki", format: "pem" },
-    privateKeyEncoding: { type: "pkcs8", format: "pem" }
-  });
-
-  const publicKeyPem = publicKey.toString();
+export async function createDeviceIdentity(
+  crypto: TrustLinkCrypto,
+  label: string
+): Promise<DeviceIdentity> {
+  const keys = await crypto.generateSigningKeyPair();
+  const publicHash = await crypto.hash(stableJsonBytes({
+    algorithm: keys.algorithm,
+    publicKey: keys.publicKey
+  }));
 
   return {
-    id: deriveDeviceId(publicKeyPem),
+    id: deriveDeviceIdFromHash(publicHash),
     label,
-    publicKeyPem,
-    privateKeyPem: privateKey.toString(),
-    fingerprint: shortFingerprint(publicKeyPem),
+    publicKey: keys.publicKey,
+    privateKey: keys.privateKey,
+    keyAlgorithm: keys.algorithm,
+    fingerprint: shortFingerprint(publicHash),
     createdAt: nowIso()
   };
 }
 
-export function deriveDeviceId(publicKeyPem: string): string {
-  return `dev_${sha256Base64Url(publicKeyPem).slice(0, 32)}`;
+export async function deriveDeviceId(
+  crypto: TrustLinkCrypto,
+  publicKey: string,
+  keyAlgorithm: string
+): Promise<string> {
+  return deriveDeviceIdFromHash(await crypto.hash(stableJsonBytes({ algorithm: keyAlgorithm, publicKey })));
 }
 
 export function toPublicIdentity(identity: DeviceIdentity): PublicDeviceIdentity {
   return {
     id: identity.id,
     label: identity.label,
-    publicKeyPem: identity.publicKeyPem,
+    publicKey: identity.publicKey,
+    keyAlgorithm: identity.keyAlgorithm,
     fingerprint: identity.fingerprint,
     createdAt: identity.createdAt
   };
 }
 
 export function assertPublicIdentity(identity: PublicDeviceIdentity): void {
-  const expected = deriveDeviceId(identity.publicKeyPem);
-  if (identity.id !== expected) {
-    throw new Error(`Device id and public key mismatch for ${identity.label}`);
+  if (!identity.id.startsWith("dev_")) {
+    throw new Error("Device identity id must use the dev_ prefix");
+  }
+  if (!identity.label.trim()) {
+    throw new Error("Device identity label is required");
+  }
+  if (!identity.publicKey.trim()) {
+    throw new Error("Device identity public key is required");
+  }
+  if (!identity.keyAlgorithm.trim()) {
+    throw new Error("Device identity key algorithm is required");
   }
 }
 
-export function signPayload<T>(identity: DeviceIdentity, payload: T): SignedPayload<T> {
-  const bytes = utf8(stableJson(payload));
-  const signature = sign(null, bytes, createPrivateKey(identity.privateKeyPem));
-  return { payload, signature: toBase64Url(signature) };
+export async function verifyPublicIdentity(
+  crypto: TrustLinkCrypto,
+  identity: PublicDeviceIdentity
+): Promise<boolean> {
+  assertPublicIdentity(identity);
+  const expected = await deriveDeviceId(crypto, identity.publicKey, identity.keyAlgorithm);
+  return expected === identity.id;
 }
 
-export function verifySignedPayload<T>(
-  publicKeyPem: string,
-  signed: SignedPayload<T>
-): boolean {
-  return verify(
-    null,
-    utf8(stableJson(signed.payload)),
-    createPublicKey(publicKeyPem),
-    Buffer.from(signed.signature.replaceAll("-", "+").replaceAll("_", "/"), "base64")
-  );
+export async function signPayload<TPayload>(
+  crypto: TrustLinkCrypto,
+  identity: DeviceIdentity,
+  payload: TPayload
+): Promise<SignedPayload<TPayload>> {
+  const signature = await crypto.sign(identity.privateKey, stableJsonBytes(payload));
+  return {
+    payload,
+    signature: toBase64Url(signature),
+    algorithm: identity.keyAlgorithm
+  };
+}
+
+export async function verifySignedPayload<TPayload>(
+  crypto: TrustLinkCrypto,
+  publicKey: string,
+  signed: SignedPayload<TPayload>
+): Promise<boolean> {
+  return crypto.verify(publicKey, stableJsonBytes(signed.payload), fromBase64Url(signed.signature));
+}
+
+function deriveDeviceIdFromHash(hash: Uint8Array): string {
+  return `dev_${toBase64Url(hash).slice(0, 32)}`;
 }

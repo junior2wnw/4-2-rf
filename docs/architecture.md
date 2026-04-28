@@ -1,72 +1,57 @@
 # Architecture
 
-TrustLink Core is built around one rule:
+TrustLink Kernel has one job:
 
 ```text
-Connect trusted device identities.
+Move opaque bytes between trusted identities over fresh encrypted sessions.
 ```
 
 ## Layers
 
-1. Identity Layer
-   Device identity is an Ed25519 public key. The private key stays on the device.
+1. Identity
+   A device identity is a public signing key plus stable derived id. The private
+   key stays in a platform-owned store.
 
-2. Trust Store
-   A peer becomes trusted only after explicit local consent. Trust is pairwise and can be asymmetric.
+2. Trust
+   A peer becomes trusted only after local consent. Trust is revocable and
+   permission-scoped.
 
-3. Link Space
-   Two or more devices can share one link context. Internally, every device pair keeps the same simple pairwise link model.
+3. Pairing
+   An invite is a signed, serializable payload. QR, NFC, links, copy/paste, and
+   local discovery can all carry the same invite string.
 
-4. Discovery Layer
-   Discovery can find candidates through any configured provider. Every candidate must prove its identity key.
+4. Session
+   A trusted pair performs a signed handshake, creates temporary agreement keys,
+   derives directional keys, and encrypts frames.
 
-5. Path Engine
-   Candidate paths are ranked by latency, loss, bandwidth, cost, battery policy, locality, forwarding, and local policy.
+5. Byte Envelope
+   A byte envelope carries `Uint8Array` payloads plus opaque application
+   metadata such as `contentType` and `format`.
 
-6. Transport Adapters
-   Transports implement one small contract. They move encrypted frames only. Transport ids are open strings.
+6. Link Space
+   A group is represented as a versioned context over ordinary pairwise trusted
+   links. The kernel does not need a special group transport.
 
-7. Session Security
-   Each session uses temporary X25519 keys, signed handshake transcripts, HKDF-SHA256, and ChaCha20-Poly1305 frames.
+7. Recovery
+   Checkpoints describe delivered sequence numbers, durable ids, and resumable
+   stream ids. Applications decide what replay means for their format.
 
-8. Envelope
-   One message envelope carries any channel data: text, binary, API calls, events, telemetry, and custom protocols.
+8. Ports
+   Crypto, storage, discovery, and transport are interfaces. Node, browser,
+   mobile, LAN, relay, hardware, and embedded implementations live outside the
+   kernel.
 
-9. Permission Engine
-   Peers get specific actions: `data.send`, `events.sync`, `api.call:/health`.
+## Non-Goals
 
-10. State Sync
-   Reconnect compares stream checkpoints, replayable durable messages, and resumable transfers.
+- no UI primitives
+- no QR rendering
+- no chat semantics
+- no file semantics
+- no account system
+- no mandatory transport
+- no platform-specific private-key storage in the core path
 
-11. Recovery Engine
-   After disconnect, the node discovers paths again, races them, rotates session keys, resumes streams, and refreshes permissions.
+## Result
 
-12. Abuse Protection
-   Public service surfaces should use rate limits, quotas, and clear denial events.
-
-13. Audit
-   Logs events such as pairing, selected path, denied permission, reconnect, and revocation without recording payload.
-
-14. Module Registry
-   Storage, discovery, transports, channels, UI adapters, QR renderers, and tools connect through one registry.
-
-## Design Decisions
-
-- Every action is checked through permissions.
-- Device identity is pinned to a public key.
-- Forwarding services move encrypted frames.
-- Discovery is scoped to known peers and configured providers.
-- Starter modules provide messages, files, and QR as examples.
-- Every reconnect creates a fresh session.
-- Transport and channel ids stay open for user modules.
-
-## Adapter Examples
-
-The kernel accepts any adapter id. A technology user can add adapters like:
-
-- `local.fast`
-- `edge.standard`
-- `forwarder.standard`
-- `vendor.custom`
-- persistent trust storage through SQLite or the platform key/value store
-- private key storage through DPAPI, Keychain, Android Keystore, Secret Service, TPM, or a hardware key
+The same kernel can sit under a PWA chat, a CRDT sync engine, a device relay,
+an IoT command channel, a game state stream, or server-to-server private pipes.

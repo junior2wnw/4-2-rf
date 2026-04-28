@@ -1,4 +1,4 @@
-import { randomId, nowIso } from "../utils/encoding.js";
+import { fromBase64Url, nowIso, randomId, toBase64Url } from "../utils/encoding.js";
 
 export type DeliveryMode =
   | "reliable"
@@ -10,7 +10,7 @@ export type DeliveryMode =
   | "at_least_once"
   | "exactly_once";
 
-export interface DeliveryOptions {
+export interface DeliveryPolicy {
   readonly mode: DeliveryMode;
   readonly ack?: boolean;
   readonly resume?: boolean;
@@ -18,40 +18,38 @@ export interface DeliveryOptions {
   readonly idempotencyKey?: string;
 }
 
-export interface MessageEnvelope<TPayload = unknown> {
+export interface ByteEnvelope {
   readonly v: 1;
-  readonly msgId: string;
+  readonly envelopeId: string;
   readonly streamId: string;
-  readonly channel: string;
-  readonly type: string;
+  readonly seq: number;
   readonly contentType: string;
-  readonly encoding: "json" | "utf8" | "binary" | "base64url";
-  readonly delivery: DeliveryOptions;
+  readonly format: string;
+  readonly delivery: DeliveryPolicy;
   readonly meta: Record<string, unknown>;
-  readonly payload: TPayload;
+  readonly payload: string;
   readonly createdAt: string;
 }
 
-export interface EnvelopeInput<TPayload> {
-  readonly channel: string;
-  readonly type: string;
-  readonly contentType: string;
-  readonly encoding: MessageEnvelope["encoding"];
-  readonly payload: TPayload;
-  readonly delivery?: Partial<DeliveryOptions> & { mode?: DeliveryMode };
+export interface ByteEnvelopeInput {
+  readonly streamId: string;
+  readonly seq: number;
+  readonly payload: Uint8Array;
+  readonly contentType?: string;
+  readonly format?: string;
+  readonly delivery?: Partial<DeliveryPolicy> & { mode?: DeliveryMode };
   readonly meta?: Record<string, unknown>;
-  readonly streamId?: string;
+  readonly envelopeId?: string;
 }
 
-export function createEnvelope<TPayload>(input: EnvelopeInput<TPayload>): MessageEnvelope<TPayload> {
-  const envelope: MessageEnvelope<TPayload> = {
+export function createByteEnvelope(input: ByteEnvelopeInput): ByteEnvelope {
+  const envelope: ByteEnvelope = {
     v: 1,
-    msgId: randomId("msg"),
-    streamId: input.streamId ?? randomId("str"),
-    channel: input.channel,
-    type: input.type,
-    contentType: input.contentType,
-    encoding: input.encoding,
+    envelopeId: input.envelopeId ?? randomId("env"),
+    streamId: input.streamId,
+    seq: input.seq,
+    contentType: input.contentType ?? "application/octet-stream",
+    format: input.format ?? "opaque",
     delivery: {
       mode: input.delivery?.mode ?? "reliable",
       ack: input.delivery?.ack ?? true,
@@ -60,23 +58,28 @@ export function createEnvelope<TPayload>(input: EnvelopeInput<TPayload>): Messag
       ...(input.delivery?.idempotencyKey ? { idempotencyKey: input.delivery.idempotencyKey } : {})
     },
     meta: input.meta ?? {},
-    payload: input.payload,
+    payload: toBase64Url(input.payload),
     createdAt: nowIso()
   };
 
-  validateEnvelope(envelope);
+  validateByteEnvelope(envelope);
   return envelope;
 }
 
-export function validateEnvelope(envelope: MessageEnvelope): void {
+export function byteEnvelopePayload(envelope: ByteEnvelope): Uint8Array {
+  validateByteEnvelope(envelope);
+  return fromBase64Url(envelope.payload);
+}
+
+export function validateByteEnvelope(envelope: ByteEnvelope): void {
   if (envelope.v !== 1) {
     throw new Error(`Unsupported envelope version: ${envelope.v}`);
   }
-  if (!envelope.msgId || !envelope.streamId) {
-    throw new Error("Envelope must include msgId and streamId");
+  if (!envelope.envelopeId || !envelope.streamId) {
+    throw new Error("Envelope must include envelopeId and streamId");
   }
-  if (!envelope.channel || !envelope.type) {
-    throw new Error("Envelope must include channel and type");
+  if (!Number.isSafeInteger(envelope.seq) || envelope.seq < 0) {
+    throw new Error("Envelope seq must be a safe non-negative integer");
   }
   if (envelope.delivery.mode === "exactly_once" && !envelope.delivery.idempotencyKey) {
     throw new Error("exactly_once delivery requires idempotencyKey");
