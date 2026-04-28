@@ -37,9 +37,9 @@ test("trusted devices exchange arbitrary encrypted bytes", async () => {
   const frame = await initiatorSession.seal(payload, utf8("binary"));
 
   assert.deepEqual(await responderSession.open(frame, utf8("binary")), payload);
-  assert.equal(initiatorSession.allowsLocal({ channel: "stream", action: "write" }), true);
-  assert.equal(initiatorSession.allowsLocal({ channel: "device", action: "control" }), false);
-  assert.throws(() => initiatorSession.requireLocal({ channel: "device", action: "control" }), /Permission denied/);
+  assert.equal(initiatorSession.allows({ channel: "stream", action: "write" }), true);
+  assert.equal(initiatorSession.allows({ channel: "device", action: "control" }), false);
+  assert.throws(() => initiatorSession.require({ channel: "device", action: "control" }), /Permission denied/);
 });
 
 test("sessions reject replay, gaps, wrong context, and oversized frames", async () => {
@@ -184,13 +184,13 @@ test("session grants can be lower than the trust record", async () => {
     aTrust,
     b,
     bTrust,
-    { grantedPermissions: ["stream.write"], requestedPermissions: ["stream.write"] }
+    { grantPermissions: ["stream.write"], requestedPermissions: ["stream.write"] }
   );
 
   assert.equal(initiatorSession.allowsPeer({ channel: "stream", action: "write" }), true);
   assert.equal(initiatorSession.allowsPeer({ channel: "device", action: "control", resource: "screen" }), false);
-  assert.equal(responderSession.allowsLocal({ channel: "stream", action: "write" }), true);
-  assert.equal(responderSession.allowsLocal({ channel: "device", action: "control", resource: "screen" }), false);
+  assert.equal(responderSession.allows({ channel: "stream", action: "write" }), true);
+  assert.equal(responderSession.allows({ channel: "device", action: "control", resource: "screen" }), false);
 });
 
 test("byte envelopes preserve opaque payloads with bounded metadata", () => {

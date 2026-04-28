@@ -3,7 +3,7 @@
 TrustLink Kernel is a small technology core for consent-based encrypted byte
 streams between trusted identities.
 
-It gives higher layers five primitives:
+It gives higher layers a small set of primitives:
 
 ```text
 identity
@@ -65,7 +65,7 @@ for every peer. A session receives the current grants during handshake and
 answers simple questions:
 
 ```ts
-session.requireLocal({ channel: "stream", action: "write" });
+session.require({ channel: "stream", action: "write" });
 session.requirePeer({ channel: "device", action: "control", resource: "screen" });
 ```
 

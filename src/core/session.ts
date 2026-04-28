@@ -25,7 +25,7 @@ export const maxSessionSeq = Number.MAX_SAFE_INTEGER;
 export interface HandshakeOptions {
   readonly capabilities?: readonly string[];
   readonly requestedPermissions?: readonly string[];
-  readonly grantedPermissions?: readonly string[];
+  readonly grantPermissions?: readonly string[];
   readonly ttlMs?: number;
   readonly now?: () => number;
   readonly maxPlaintextBytes?: number;
@@ -99,8 +99,8 @@ export interface SessionSnapshot {
   readonly receiveSeq: number;
   readonly cryptoSuite: string;
   readonly capability: string;
-  readonly localGrant: readonly string[];
-  readonly peerGrant: readonly string[];
+  readonly grantedToPeer: readonly string[];
+  readonly grantedByPeer: readonly string[];
   readonly maxPlaintextBytes: number;
 }
 
@@ -114,7 +114,7 @@ interface DirectionalMaterial {
 interface NormalizedHandshakeOptions {
   readonly capabilities: readonly string[];
   readonly requestedPermissions: readonly string[];
-  readonly grantedPermissions?: readonly string[];
+  readonly grantPermissions?: readonly string[];
   readonly ttlMs: number;
   readonly now: () => number;
   readonly maxPlaintextBytes: number;
@@ -137,8 +137,8 @@ export class SecureSession {
     private readonly sendNonceSeed: Uint8Array,
     private readonly receiveNonceSeed: Uint8Array,
     private readonly capability: string,
-    private readonly localGrant: readonly string[],
-    private readonly peerGrant: readonly string[],
+    private readonly grantedToPeer: readonly string[],
+    private readonly grantedByPeer: readonly string[],
     private readonly maxPlaintextBytes: number
   ) {}
 
@@ -194,20 +194,20 @@ export class SecureSession {
     return readUtf8(await this.open(frame, utf8(context)));
   }
 
-  allowsLocal(request: PermissionRequest): boolean {
-    return new PermissionPolicy(this.peerGrant).allows(request);
+  allows(request: PermissionRequest): boolean {
+    return new PermissionPolicy(this.grantedByPeer).allows(request);
   }
 
-  requireLocal(request: PermissionRequest): void {
-    new PermissionPolicy(this.peerGrant).require(request);
+  require(request: PermissionRequest): void {
+    new PermissionPolicy(this.grantedByPeer).require(request);
   }
 
   allowsPeer(request: PermissionRequest): boolean {
-    return new PermissionPolicy(this.localGrant).allows(request);
+    return new PermissionPolicy(this.grantedToPeer).allows(request);
   }
 
   requirePeer(request: PermissionRequest): void {
-    new PermissionPolicy(this.localGrant).require(request);
+    new PermissionPolicy(this.grantedToPeer).require(request);
   }
 
   snapshot(): SessionSnapshot {
@@ -221,8 +221,8 @@ export class SecureSession {
       receiveSeq: this.receiveSeq,
       cryptoSuite: this.crypto.suite,
       capability: this.capability,
-      localGrant: [...this.localGrant],
-      peerGrant: [...this.peerGrant],
+      grantedToPeer: [...this.grantedToPeer],
+      grantedByPeer: [...this.grantedByPeer],
       maxPlaintextBytes: this.maxPlaintextBytes
     };
   }
@@ -295,7 +295,7 @@ export async function createHandshakeOffer(
     agreementAlgorithm: agreementKeyPair.algorithm,
     capabilities: options.capabilities,
     requestedPermissions: options.requestedPermissions,
-    grantedPermissions: normalizeGrant(options.grantedPermissions ?? []),
+    grantedPermissions: normalizeGrant(options.grantPermissions ?? []),
     cryptoSuite: crypto.suite,
     nonce: toBase64Url(crypto.randomBytes(16)),
     createdAt: new Date(options.now()).toISOString()
@@ -318,7 +318,7 @@ export async function acceptHandshake(
   const peerRecord = await verifyOfferForLocal(crypto, local, trustStore, offer, options);
 
   const capability = selectSharedCapability(offer.payload.capabilities, options.capabilities);
-  const localGrant = resolveLocalGrant(peerRecord.permissions, offer.payload.requestedPermissions, options.grantedPermissions);
+  const grantToPeer = resolveGrantToPeer(peerRecord.permissions, offer.payload.requestedPermissions, options.grantPermissions);
   const agreementKeyPair = await crypto.generateAgreementKeyPair();
   const offerHash = await hashSigned(crypto, offer);
   const answerPayload: HandshakeAnswerPayload = {
@@ -331,7 +331,7 @@ export async function acceptHandshake(
     agreementAlgorithm: agreementKeyPair.algorithm,
     capabilities: [capability],
     requestedPermissions: options.requestedPermissions,
-    grantedPermissions: localGrant,
+    grantedPermissions: grantToPeer,
     cryptoSuite: crypto.suite,
     nonce: toBase64Url(crypto.randomBytes(16)),
     createdAt: new Date(options.now()).toISOString()
@@ -346,7 +346,7 @@ export async function acceptHandshake(
     offer,
     answer,
     capability,
-    localGrant,
+    grantToPeer,
     normalizeGrant(offer.payload.grantedPermissions),
     options.maxPlaintextBytes
   );
@@ -391,9 +391,9 @@ export async function finishHandshake(
   if (!options.capabilities.includes(capability)) {
     throw new Error("Handshake answer capability mismatch");
   }
-  const localGrant = normalizeGrant(pending.offer.payload.grantedPermissions);
-  assertPermissionSubset(localGrant, trustStore.requireTrusted(answer.payload.from.id).permissions, "Handshake offer grants");
-  const peerGrant = normalizeGrant(answer.payload.grantedPermissions);
+  const grantToPeer = normalizeGrant(pending.offer.payload.grantedPermissions);
+  assertPermissionSubset(grantToPeer, trustStore.requireTrusted(answer.payload.from.id).permissions, "Handshake offer grants");
+  const grantByPeer = normalizeGrant(answer.payload.grantedPermissions);
 
   const sharedSecret = await crypto.sharedSecret(pending.agreementKeyPair.privateKey, answer.payload.agreementPublicKey);
   return buildSession(
@@ -404,8 +404,8 @@ export async function finishHandshake(
     pending.offer,
     answer,
     capability,
-    localGrant,
-    peerGrant,
+    grantToPeer,
+    grantByPeer,
     options.maxPlaintextBytes
   );
 }
@@ -419,7 +419,7 @@ export async function establishTrustedSession(
   optionsInput: readonly string[] | HandshakeOptions = {}
 ): Promise<{ initiatorSession: SecureSession; responderSession: SecureSession }> {
   const initiatorRecord = initiatorTrust.requireTrusted(responder.id);
-  const offerOptions = withDefaultGrantedPermissions(optionsInput, initiatorRecord.permissions);
+  const offerOptions = withDefaultGrantPermissions(optionsInput, initiatorRecord.permissions);
   const pending = await createHandshakeOffer(crypto, initiator, toPublicIdentity(responder), offerOptions);
   const accepted = await acceptHandshake(crypto, responder, responderTrust, pending.offer, optionsInput);
   const initiatorSession = await finishHandshake(crypto, initiator, initiatorTrust, pending, accepted.answer, offerOptions);
@@ -468,8 +468,8 @@ async function buildSession(
   offer: SignedHandshake<HandshakeOfferPayload>,
   answer: SignedHandshake<HandshakeAnswerPayload>,
   capability: string,
-  localGrant: readonly string[],
-  peerGrant: readonly string[],
+  grantedToPeer: readonly string[],
+  grantedByPeer: readonly string[],
   maxPlaintextBytes: number
 ): Promise<SecureSession> {
   const transcriptHash = await hashSigned(crypto, {
@@ -492,8 +492,8 @@ async function buildSession(
     material.sendNonceSeed,
     material.receiveNonceSeed,
     capability,
-    normalizeGrant(localGrant),
-    normalizeGrant(peerGrant),
+    normalizeGrant(grantedToPeer),
+    normalizeGrant(grantedByPeer),
     maxPlaintextBytes
   );
 }
@@ -552,11 +552,11 @@ function normalizeHandshakeOptions(input: readonly string[] | HandshakeOptions =
     now: options.now ?? Date.now,
     maxPlaintextBytes
   };
-  return options.grantedPermissions === undefined
+  return options.grantPermissions === undefined
     ? normalized
     : {
         ...normalized,
-        grantedPermissions: normalizeGrant(options.grantedPermissions)
+        grantPermissions: normalizeGrant(options.grantPermissions)
       };
 }
 
@@ -564,7 +564,7 @@ function normalizeGrant(permissions: readonly string[]): readonly string[] {
   return new PermissionPolicy(permissions).list();
 }
 
-function resolveLocalGrant(
+function resolveGrantToPeer(
   maximum: readonly string[],
   requested: readonly string[],
   configured?: readonly string[]
@@ -581,16 +581,16 @@ function resolveLocalGrant(
   return maximumGrant;
 }
 
-function withDefaultGrantedPermissions(
+function withDefaultGrantPermissions(
   input: readonly string[] | HandshakeOptions,
-  grantedPermissions: readonly string[]
+  grantPermissions: readonly string[]
 ): HandshakeOptions {
   const options: HandshakeOptions = Array.isArray(input)
     ? { capabilities: input as readonly string[] }
     : input as HandshakeOptions;
   return {
     ...options,
-    grantedPermissions: options.grantedPermissions ?? grantedPermissions
+    grantPermissions: options.grantPermissions ?? grantPermissions
   };
 }
 
