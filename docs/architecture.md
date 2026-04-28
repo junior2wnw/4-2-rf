@@ -3,25 +3,25 @@
 TrustLink Core is built around one rule:
 
 ```text
-Connect devices, not networks.
+Connect trusted device identities.
 ```
 
 ## Layers
 
 1. Identity Layer
-   Device identity is an Ed25519 public key. The private key never leaves the device.
+   Device identity is an Ed25519 public key. The private key stays on the device.
 
 2. Trust Store
    A peer becomes trusted only after explicit local consent. Trust is pairwise and can be asymmetric.
 
 3. Discovery Layer
-   Discovery can find candidates through LAN, known endpoints, rendezvous, or relay metadata. Discovery never means trust.
+   Discovery can find candidates through LAN, known endpoints, rendezvous, or relay metadata. Every candidate must prove its identity key.
 
 4. Path Engine
    Candidate paths are ranked by latency, loss, bandwidth, cost, battery policy, locality, relay usage, and local policy.
 
 5. Transport Adapters
-   Transports implement one small contract. They move encrypted frames and never receive private keys or plaintext.
+   Transports implement one small contract. They move encrypted frames only.
 
 6. Session Security
    Each session uses temporary X25519 keys, signed handshake transcripts, HKDF-SHA256, and ChaCha20-Poly1305 frames.
@@ -46,12 +46,12 @@ Connect devices, not networks.
 
 ## Design Decisions
 
-- No global “connected means allowed” state.
-- No trust based on IP, MAC, hostname, or network.
-- No relay access to plaintext.
-- No scanning the whole internet.
-- No remote shell as the starting feature.
-- No permanent session token.
+- Every action is checked through permissions.
+- Device identity is pinned to a public key.
+- Relay services forward encrypted frames.
+- Discovery is scoped to known peers and configured providers.
+- The first product surface starts with messages, files, and events.
+- Every reconnect creates a fresh session.
 
 ## Production Adapters
 

@@ -36,7 +36,7 @@ HELLO
 → READY
 ```
 
-The permanent Ed25519 key proves identity. It does not encrypt data.
+The permanent Ed25519 key proves identity. Session data uses temporary X25519-derived keys.
 
 The temporary X25519 key creates a fresh shared secret for this session. Reconnect means a new session.
 
@@ -72,7 +72,7 @@ The temporary X25519 key creates a fresh shared secret for this session. Reconne
 - `unordered`: telemetry.
 - `latest_only`: screen, sensor, and video state.
 - `durable`: important events that can replay after reconnect.
-- `at_most_once`: never retry.
+- `at_most_once`: single send attempt.
 - `at_least_once`: retry, receiver handles duplicates.
 - `exactly_once`: idempotency key required.
 

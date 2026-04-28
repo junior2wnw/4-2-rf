@@ -118,7 +118,7 @@ export class SecureSession {
       throw new Error("Frame belongs to another session");
     }
     if (frame.fromDeviceId !== this.peerDeviceId || frame.toDeviceId !== this.localDeviceId) {
-      throw new Error("Frame direction does not match this session");
+      throw new Error("Frame direction mismatch for this session");
     }
 
     const nextSeq = this.receiveSeq + 1;
@@ -234,7 +234,7 @@ export function finishHandshake(
     throw new Error("Handshake answer targets another device");
   }
   if (!safeEqual(answer.payload.offerHash, hashSigned(pending.offer))) {
-    throw new Error("Handshake answer does not match pending offer");
+    throw new Error("Handshake answer mismatch for pending offer");
   }
   if (!verifySignedPayload(peerRecord.peer.publicKeyPem, answer)) {
     throw new Error("Handshake answer signature is invalid");
@@ -267,7 +267,7 @@ function verifyOfferForLocal(
 
   const peerRecord = trustStore.requireTrusted(offer.payload.from.id);
   if (peerRecord.peer.publicKeyPem !== offer.payload.from.publicKeyPem) {
-    throw new Error("Handshake public key does not match trust record");
+    throw new Error("Handshake public key mismatch for trust record");
   }
   if (!verifySignedPayload(peerRecord.peer.publicKeyPem, offer)) {
     throw new Error("Handshake offer signature is invalid");

@@ -59,7 +59,7 @@ export function toPublicIdentity(identity: DeviceIdentity): PublicDeviceIdentity
 export function assertPublicIdentity(identity: PublicDeviceIdentity): void {
   const expected = deriveDeviceId(identity.publicKeyPem);
   if (identity.id !== expected) {
-    throw new Error(`Device id does not match public key for ${identity.label}`);
+    throw new Error(`Device id and public key mismatch for ${identity.label}`);
   }
 }
 

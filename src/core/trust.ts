@@ -83,7 +83,7 @@ export class TrustStore {
       throw new Error(`Unknown peer: ${peerId}`);
     }
     if (record.state !== "trusted") {
-      throw new Error(`Peer is not trusted: ${peerId}`);
+      throw new Error(`Peer trust is inactive: ${peerId}`);
     }
     if (record.expiresAt && Date.parse(record.expiresAt) <= Date.now()) {
       throw new Error(`Peer trust expired: ${peerId}`);

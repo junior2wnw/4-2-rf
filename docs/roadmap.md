@@ -22,7 +22,7 @@
 - QUIC transport adapter.
 - HTTPS stream transport adapter.
 - WebRTC DataChannel adapter.
-- Relay frame forwarder with no payload access.
+- Relay frame forwarder for encrypted frames.
 - Rendezvous service for temporary endpoint exchange.
 - Stream multiplexer with backpressure.
 - CLI pairing flow with QR/link payloads.

@@ -1,8 +1,8 @@
 # Security And Legal Notes
 
-TrustLink Core is for lawful, consent-based links between devices the user owns or is allowed to administer.
+TrustLink Core is for consent-based links between devices the user owns or is allowed to administer.
 
-## Safe Description
+## Product Description
 
 Use:
 
@@ -12,16 +12,6 @@ Use:
 - explicit permissions;
 - local-first connection;
 - reconnect through unstable networks.
-
-Avoid:
-
-- bypass tool;
-- anti-blocking;
-- hidden VPN;
-- invisible tunnel;
-- DPI evasion;
-- access to prohibited resources;
-- bypassing corporate controls.
 
 ## Security Model
 
@@ -35,9 +25,9 @@ TrustLink uses standard primitives:
 
 Rules:
 
-- private keys do not leave the device;
-- discovery never equals trust;
-- relay never sees plaintext;
+- private keys stay on the device;
+- discovery candidates must prove their identity key;
+- relay services forward encrypted frames only;
 - permissions are checked per action;
 - reconnect rotates session keys;
 - revocation kills active and future sessions.
@@ -67,4 +57,4 @@ Audit logs should include technical events only:
 - policy changed;
 - device revoked.
 
-Do not log payload, private keys, session keys, file content, clipboard content, or command output by default.
+Payload, private keys, session keys, file content, clipboard content, and command output stay outside default audit logs.

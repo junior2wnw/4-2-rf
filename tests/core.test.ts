@@ -65,7 +65,7 @@ test("revoked trust blocks future sessions", () => {
   });
   bTrust.revoke(a.id);
 
-  assert.throws(() => establishTrustedSession(a, aTrust, b, bTrust), /not trusted/);
+  assert.throws(() => establishTrustedSession(a, aTrust, b, bTrust), /trust is inactive/);
 });
 
 test("permission policy allows exact and resource-scoped grants", () => {
