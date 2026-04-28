@@ -7,7 +7,7 @@ A creates a signed invite.
 B verifies A identity and invite signature.
 B stores A as trusted after local consent.
 A stores B as trusted through its own consent path.
-Future sessions reconnect without repeating pairing.
+Future sessions reconnect through fresh handshakes.
 ```
 
 An invite is renderer-agnostic:
@@ -15,9 +15,6 @@ An invite is renderer-agnostic:
 ```text
 trustlink:v1:pair:<base64url stable-json signed payload>
 ```
-
-QR codes, deep links, NFC tags, short links, and local handoff screens can carry
-that string.
 
 ## Handshake
 
@@ -27,19 +24,21 @@ offer:
   temporary agreement public key
   capabilities
   crypto suite
+  timestamp
   identity signature
 
 answer:
   permanent public identity
   temporary agreement public key
   offer hash
-  capabilities
+  selected capability
   crypto suite
+  timestamp
   identity signature
 ```
 
 The permanent key proves identity. The temporary agreement key creates fresh
-directional session keys. Reconnect means a new session.
+directional session keys and nonce seeds. Each reconnect creates a new session.
 
 ## Sealed Frame
 
@@ -56,7 +55,15 @@ directional session keys. Reconnect means a new session.
 }
 ```
 
-Transports move sealed frames and stay payload-format agnostic.
+Transport adapters move sealed frames. The frame is authenticated with session
+id, device direction, sequence, transcript hash, selected capability, and caller
+context.
+
+Serialized frame form:
+
+```text
+trustlink:v1:frame:<base64url stable-json sealed frame>
+```
 
 ## Byte Envelope
 
@@ -67,7 +74,7 @@ Transports move sealed frames and stay payload-format agnostic.
   "streamId": "shared-doc",
   "seq": 7,
   "contentType": "application/octet-stream",
-  "format": "yjs/update-v1",
+  "format": "custom/binary",
   "delivery": {
     "mode": "reliable",
     "ack": true,
@@ -79,13 +86,14 @@ Transports move sealed frames and stay payload-format agnostic.
 }
 ```
 
-`payload` is opaque. The kernel preserves it as bytes.
+`payload` is opaque. The kernel preserves it as bytes and enforces configured
+size limits.
 
 ## Revocation
 
 ```text
 trust record revoked
-active sessions stopped by the application
+active session closed by the holder
 future handshakes fail
-optional signed revocation event is transported by the application
+optional signed revocation event carried by an adapter
 ```

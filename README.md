@@ -1,45 +1,48 @@
 # TrustLink Kernel
 
-TrustLink Kernel is a small universal core for consent-based encrypted byte
+TrustLink Kernel is a small technology core for consent-based encrypted byte
 streams between trusted identities.
 
-It is the narrow technology layer that lets higher-level systems answer:
+It gives higher layers five primitives:
 
 ```text
-Who am I?
-Who do I trust?
-Can we open a fresh encrypted session?
-Can I move these bytes with a delivery policy?
-Can I recover without changing the application format?
+identity
+trust
+pairing
+encrypted session
+opaque byte envelope
 ```
 
-Everything above that line is an adapter.
+Everything else connects through ports.
 
-## Kernel Boundary
+## Core Boundary
 
-Kernel scope:
+Inside the kernel:
 
 - device identity
 - public trust records
+- permission strings
 - pairing invite serialization
-- session handshake
-- encrypted frames
-- byte envelopes
-- link spaces
-- delivery and recovery metadata
-- transport, storage, and crypto ports
+- signed session handshake
+- encrypted frame codec
+- opaque byte envelopes
+- pairwise link spaces
+- crypto, transport, and storage ports
 
-Adapter scope:
+Outside the kernel:
 
-- UI
-- QR rendering
-- concrete transport implementations
-- application channels and protocols
-- IndexedDB, SQLite, Keychain, TPM, or cloud storage implementations
+- screens and flows
+- visual invite renderers
+- concrete network transports
+- application channels
+- large-object chunking
+- platform key storage
+- database adapters
 
 ## Payload Rule
 
-Application payloads stay opaque to the kernel.
+Payloads stay opaque to the kernel. A higher layer chooses the format; the
+kernel validates metadata, seals bytes, opens bytes, and keeps sequence rules.
 
 ```ts
 const envelope = createByteEnvelope({
@@ -47,20 +50,18 @@ const envelope = createByteEnvelope({
   seq: 1,
   payload: bytes,
   contentType: "application/octet-stream",
-  format: "yjs/update-v1"
+  format: "custom/binary"
 });
 ```
 
-`format` and `contentType` are routing metadata for the application. The kernel
-validates the envelope, encrypts bytes, opens bytes, and preserves delivery
-metadata.
+Large data should be split by an adapter into bounded byte envelopes. The
+kernel is intentionally small and deterministic.
 
 ## Quick Start
 
 ```bash
 pnpm install
 pnpm check
-pnpm doctor
 ```
 
 Minimal Node example:
@@ -73,7 +74,7 @@ import {
   establishTrustedSession,
   toPublicIdentity
 } from "trustlink-kernel";
-import { NodeTrustLinkCrypto } from "trustlink-kernel/dist/platform/node-crypto.js";
+import { NodeTrustLinkCrypto } from "trustlink-kernel/platform/node";
 
 const crypto = new NodeTrustLinkCrypto();
 const a = await createDeviceIdentity(crypto, "A");
@@ -111,18 +112,19 @@ const sealed = await initiatorSession.seal(
 const opened = await responderSession.open(sealed);
 ```
 
-## Design Principles
+## Security Shape
 
-- The permanent identity key pins a device identity.
-- Pairing is explicit and creates a revocable trust record.
-- Every session uses fresh agreement keys.
-- Transports move sealed frames only.
-- Payloads are opaque bytes.
-- Delivery semantics are metadata.
-- Platform specifics are ports.
+- stable device ids derive from public signing keys
+- trust is local, explicit, revocable, and permission-scoped
+- every session uses fresh agreement keys
+- frame nonces derive from directional session material and sequence numbers
+- frames are authenticated with session, direction, sequence, and context data
+- replay and sequence gaps are rejected inside the session
+- frame and envelope sizes are bounded by configuration
+- platform crypto, storage, and transport stay replaceable
 
-## Status
+## Maturity
 
-This branch is the cleaned kernel shape. The included Node crypto provider is a
-reference adapter for tests and server-side usage. Browser, mobile, and
-hardware-backed providers can implement the same `TrustLinkCrypto` port.
+This repository now holds the kernel only. Before sensitive deployments, add
+external cryptographic review, protocol test vectors, decoder fuzzing, adapter
+conformance tests, and platform-backed private-key storage.

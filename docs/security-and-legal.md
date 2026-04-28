@@ -2,20 +2,22 @@
 
 TrustLink Kernel is a security boundary, so the boundary stays small.
 
-## Guarantees The Kernel Tries To Provide
+## Kernel Security Properties
 
 - device identity is pinned to a public signing key
-- pairing requires an explicit trust record
-- handshakes fail for unknown or revoked peers
-- each session uses fresh temporary agreement keys
-- transports see sealed frames
+- pairing creates an explicit local trust record
+- handshakes require trusted, active peers
+- every session uses fresh temporary agreement keys
+- directional keys and nonce seeds derive from the handshake transcript
+- sealed frames reject replay and sequence gaps
 - byte payloads stay opaque to the kernel
+- size limits protect frame and envelope decoders
 
-## Metadata Still Visible To Transports
+## Metadata Visible To Transports
 
 - timing
 - frame sizes
-- endpoint ids chosen by the application
+- endpoint ids chosen by the adapter
 - session ids
 - source and target device ids
 
@@ -29,12 +31,12 @@ store trust.
 
 ## Hardening Checklist
 
-Before handling sensitive real data, higher-level systems should add:
+Before sensitive real data, add:
 
 - platform-backed private-key storage
 - threat-model review
 - protocol test vectors
 - decoder fuzzing
-- replay and reordering tests
-- rate limits on public endpoints
+- adapter conformance tests
+- public endpoint rate limits
 - revocation propagation policy

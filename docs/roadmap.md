@@ -1,28 +1,29 @@
 # Roadmap
 
-The kernel should stay small. New work should either strengthen the universal
-core or move into an adapter package.
+The kernel should stay small. New work should strengthen the universal core or
+live in a separate adapter repository.
 
 ## Kernel
 
 - protocol test vectors
 - signed link-space snapshots
-- durable outbox checkpoint helpers
 - revocation event format
-- conformance tests for transport adapters
+- adapter conformance tests
 - WebCrypto reference provider
+- decoder fuzz corpus
+- public API stability pass
 
-## Adapter Packages
+## Adapter Repositories
 
-- IndexedDB storage
-- SQLite storage
-- edge stream transport
-- direct data channel transport
-- QR renderer and scanner helpers
+- browser storage
+- mobile storage
+- hardware-backed key storage
+- visual invite renderer
+- concrete transport adapters
 - CRDT channel helpers
-- file transfer channel helpers
+- large-object channel helpers
 
 ## Rule
 
-Kernel work preserves bytes, trust, sessions, delivery metadata, and recovery
-state. Format-specific behavior belongs in adapter packages.
+Kernel work preserves bytes, trust, sessions, envelopes, frame safety, and port
+contracts. Format-specific behavior belongs in adapter repositories.

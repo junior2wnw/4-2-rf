@@ -18,6 +18,9 @@ export class NodeTrustLinkCrypto implements TrustLinkCrypto {
   readonly suite = "ed25519+x25519+hkdf-sha256+chacha20-poly1305";
 
   randomBytes(length: number): Uint8Array {
+    if (!Number.isSafeInteger(length) || length <= 0) {
+      throw new Error("Random byte length must be a safe positive integer");
+    }
     return new Uint8Array(nodeRandomBytes(length));
   }
 
@@ -65,6 +68,9 @@ export class NodeTrustLinkCrypto implements TrustLinkCrypto {
   }
 
   async hkdf(secret: Uint8Array, salt: Uint8Array, info: Uint8Array, length: number): Promise<Uint8Array> {
+    if (!Number.isSafeInteger(length) || length <= 0) {
+      throw new Error("HKDF output length must be a safe positive integer");
+    }
     return new Uint8Array(Buffer.from(hkdfSync(
       "sha256",
       Buffer.from(secret),
@@ -75,6 +81,7 @@ export class NodeTrustLinkCrypto implements TrustLinkCrypto {
   }
 
   async seal(key: Uint8Array, nonce: Uint8Array, plaintext: Uint8Array, aad: Uint8Array): Promise<SealedBytes> {
+    assertAeadInputs(key, nonce);
     const cipher = createCipheriv("chacha20-poly1305", Buffer.from(key), Buffer.from(nonce), {
       authTagLength: 16
     });
@@ -90,6 +97,10 @@ export class NodeTrustLinkCrypto implements TrustLinkCrypto {
   }
 
   async open(key: Uint8Array, nonce: Uint8Array, sealed: SealedBytes, aad: Uint8Array): Promise<Uint8Array> {
+    assertAeadInputs(key, nonce);
+    if (sealed.tag.length !== 16) {
+      throw new Error("ChaCha20-Poly1305 tag must be 16 bytes");
+    }
     const decipher = createDecipheriv("chacha20-poly1305", Buffer.from(key), Buffer.from(nonce), {
       authTagLength: 16
     });
@@ -99,5 +110,14 @@ export class NodeTrustLinkCrypto implements TrustLinkCrypto {
       decipher.update(Buffer.from(sealed.ciphertext)),
       decipher.final()
     ]));
+  }
+}
+
+function assertAeadInputs(key: Uint8Array, nonce: Uint8Array): void {
+  if (key.length !== 32) {
+    throw new Error("ChaCha20-Poly1305 key must be 32 bytes");
+  }
+  if (nonce.length !== 12) {
+    throw new Error("ChaCha20-Poly1305 nonce must be 12 bytes");
   }
 }

@@ -14,7 +14,7 @@ The kernel exposes ports. Higher-level systems provide adapters.
 - authenticated encryption
 
 The included Node provider is a reference adapter. Browser, native mobile,
-hardware-backed, and embedded providers should implement the same interface.
+hardware-backed, and embedded providers can implement the same interface.
 
 ## Storage
 
@@ -22,26 +22,24 @@ Storage adapters persist:
 
 - local identity
 - trust records
-- link spaces
-- recovery checkpoints
-- durable outbox data
+- link-space snapshots
 
 Storage choices stay in adapters: IndexedDB, SQLite, Keychain, filesystem, TPM,
-or cloud databases.
+secure enclave, or managed databases.
 
 ## Transport
 
-A transport adapter connects to an endpoint and sends sealed frames.
+A transport adapter connects to its own endpoint type and sends sealed frames.
 
-Adapter examples:
+Examples of endpoint families:
 
+- local process pipe
+- local network channel
+- datagram channel
 - edge stream
-- direct data channel
-- datagram transport
-- local discovery
 - BLE
 - USB
-- local process pipe
+- server-side private stream
 
 All of them move the same sealed frame shape.
 

@@ -38,10 +38,16 @@ export function toBase64Url(value: Uint8Array): string {
 }
 
 export function fromBase64Url(value: string): Uint8Array {
+  if (!isBase64Url(value.replace(/=+$/u, ""))) {
+    throw new Error("Invalid base64url input");
+  }
   let buffer = 0;
   let bits = 0;
   const output: number[] = [];
   const normalized = value.replaceAll("-", "+").replaceAll("_", "/").replace(/=+$/u, "");
+  if (normalized.length % 4 === 1) {
+    throw new Error("Invalid base64url input length");
+  }
   for (const char of normalized) {
     const next = base64Alphabet.indexOf(char);
     if (next < 0) {
@@ -62,6 +68,9 @@ export function shortFingerprint(hashBytes: Uint8Array): string {
 }
 
 export function randomBytes(length: number): Uint8Array {
+  if (!Number.isSafeInteger(length) || length <= 0) {
+    throw new Error("Random byte length must be a safe positive integer");
+  }
   const cryptoApi = globalThis.crypto as { getRandomValues?: (bytes: Uint8Array) => Uint8Array } | undefined;
   if (!cryptoApi?.getRandomValues) {
     throw new Error("No secure random source is available");

@@ -1,7 +1,27 @@
 import { TrustLinkCrypto, TrustLinkKeyPair } from "./crypto.js";
-import { DeviceIdentity, PublicDeviceIdentity, signPayload, toPublicIdentity, verifySignedPayload } from "./identity.js";
+import {
+  DeviceIdentity,
+  PublicDeviceIdentity,
+  signPayload,
+  toPublicIdentity,
+  verifyPublicIdentity,
+  verifySignedPayload
+} from "./identity.js";
 import { TrustStore } from "./trust.js";
+import { validateSealedFrame } from "./frame.js";
 import { fromBase64Url, readUtf8, stableJson, stableJsonBytes, toBase64Url, utf8 } from "../utils/encoding.js";
+
+export const trustLinkStreamCapability = "trustlink.stream.v1";
+export const defaultHandshakeTtlMs = 2 * 60 * 1000;
+export const defaultMaxPlaintextBytes = 1024 * 1024;
+export const maxSessionSeq = Number.MAX_SAFE_INTEGER;
+
+export interface HandshakeOptions {
+  readonly capabilities?: readonly string[];
+  readonly ttlMs?: number;
+  readonly now?: () => number;
+  readonly maxPlaintextBytes?: number;
+}
 
 export interface HandshakeOfferPayload {
   readonly v: 1;
@@ -66,11 +86,28 @@ export interface SessionSnapshot {
   readonly sendSeq: number;
   readonly receiveSeq: number;
   readonly cryptoSuite: string;
+  readonly capability: string;
+  readonly maxPlaintextBytes: number;
+}
+
+interface DirectionalMaterial {
+  readonly sendKey: Uint8Array;
+  readonly receiveKey: Uint8Array;
+  readonly sendNonceSeed: Uint8Array;
+  readonly receiveNonceSeed: Uint8Array;
+}
+
+interface NormalizedHandshakeOptions {
+  readonly capabilities: readonly string[];
+  readonly ttlMs: number;
+  readonly now: () => number;
+  readonly maxPlaintextBytes: number;
 }
 
 export class SecureSession {
   private sendSeq = 0;
   private receiveSeq = 0;
+  private sealChain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly crypto: TrustLinkCrypto,
@@ -80,29 +117,22 @@ export class SecureSession {
     readonly createdAt: string,
     readonly transcriptHash: string,
     private readonly sendKey: Uint8Array,
-    private readonly receiveKey: Uint8Array
+    private readonly receiveKey: Uint8Array,
+    private readonly sendNonceSeed: Uint8Array,
+    private readonly receiveNonceSeed: Uint8Array,
+    private readonly capability: string,
+    private readonly maxPlaintextBytes: number
   ) {}
 
   async seal(plaintext: Uint8Array, context: Uint8Array = new Uint8Array()): Promise<SealedFrame> {
-    const nonce = this.crypto.randomBytes(12);
-    const seq = ++this.sendSeq;
-    const sealed = await this.crypto.seal(
-      this.sendKey,
-      nonce,
-      plaintext,
-      this.frameAad(seq, context, this.localDeviceId, this.peerDeviceId)
+    const plaintextCopy = copyBytes(plaintext);
+    const contextCopy = copyBytes(context);
+    const job = this.sealChain.then(() => this.sealNext(plaintextCopy, contextCopy));
+    this.sealChain = job.then(
+      () => undefined,
+      () => undefined
     );
-
-    return {
-      v: 1,
-      sessionId: this.id,
-      fromDeviceId: this.localDeviceId,
-      toDeviceId: this.peerDeviceId,
-      seq,
-      nonce: toBase64Url(nonce),
-      ciphertext: toBase64Url(sealed.ciphertext),
-      tag: toBase64Url(sealed.tag)
-    };
+    return job;
   }
 
   async sealUtf8(value: string, context = ""): Promise<SealedFrame> {
@@ -110,20 +140,28 @@ export class SecureSession {
   }
 
   async open(frame: SealedFrame, context: Uint8Array = new Uint8Array()): Promise<Uint8Array> {
+    validateSealedFrame(frame, { maxCiphertextBytes: this.maxPlaintextBytes });
     if (frame.sessionId !== this.id) {
       throw new Error("Frame belongs to another session");
     }
     if (frame.fromDeviceId !== this.peerDeviceId || frame.toDeviceId !== this.localDeviceId) {
       throw new Error("Frame direction mismatch for this session");
     }
-    const nextSeq = this.receiveSeq + 1;
-    if (frame.seq < nextSeq) {
-      throw new Error("Replay or stale frame rejected");
+
+    const expectedSeq = this.receiveSeq + 1;
+    if (frame.seq !== expectedSeq) {
+      throw new Error("Frame sequence mismatch");
+    }
+
+    const nonce = fromBase64Url(frame.nonce);
+    const expectedNonce = nonceForSeq(this.receiveNonceSeed, frame.seq);
+    if (!bytesEqual(nonce, expectedNonce)) {
+      throw new Error("Frame nonce mismatch");
     }
 
     const plaintext = await this.crypto.open(
       this.receiveKey,
-      fromBase64Url(frame.nonce),
+      nonce,
       {
         ciphertext: fromBase64Url(frame.ciphertext),
         tag: fromBase64Url(frame.tag)
@@ -147,12 +185,53 @@ export class SecureSession {
       transcriptHash: this.transcriptHash,
       sendSeq: this.sendSeq,
       receiveSeq: this.receiveSeq,
-      cryptoSuite: this.crypto.suite
+      cryptoSuite: this.crypto.suite,
+      capability: this.capability,
+      maxPlaintextBytes: this.maxPlaintextBytes
     };
+  }
+
+  private async sealNext(plaintext: Uint8Array, context: Uint8Array): Promise<SealedFrame> {
+    if (plaintext.length > this.maxPlaintextBytes) {
+      throw new Error("Plaintext exceeds configured frame limit");
+    }
+    if (this.sendSeq >= maxSessionSeq) {
+      throw new Error("Session sequence exhausted");
+    }
+
+    const seq = this.sendSeq + 1;
+    this.sendSeq = seq;
+
+    try {
+      const nonce = nonceForSeq(this.sendNonceSeed, seq);
+      const sealed = await this.crypto.seal(
+        this.sendKey,
+        nonce,
+        plaintext,
+        this.frameAad(seq, context, this.localDeviceId, this.peerDeviceId)
+      );
+
+      return {
+        v: 1,
+        sessionId: this.id,
+        fromDeviceId: this.localDeviceId,
+        toDeviceId: this.peerDeviceId,
+        seq,
+        nonce: toBase64Url(nonce),
+        ciphertext: toBase64Url(sealed.ciphertext),
+        tag: toBase64Url(sealed.tag)
+      };
+    } catch (error) {
+      if (this.sendSeq === seq) {
+        this.sendSeq = seq - 1;
+      }
+      throw error;
+    }
   }
 
   private frameAad(seq: number, context: Uint8Array, fromDeviceId: string, toDeviceId: string): Uint8Array {
     return stableJsonBytes({
+      capability: this.capability,
       context: toBase64Url(context),
       fromDeviceId,
       seq,
@@ -167,8 +246,9 @@ export async function createHandshakeOffer(
   crypto: TrustLinkCrypto,
   local: DeviceIdentity,
   peer: PublicDeviceIdentity,
-  capabilities: readonly string[] = ["trustlink.stream.v1"]
+  optionsInput: readonly string[] | HandshakeOptions = {}
 ): Promise<PendingHandshake> {
+  const options = normalizeHandshakeOptions(optionsInput);
   const agreementKeyPair = await crypto.generateAgreementKeyPair();
   const payload: HandshakeOfferPayload = {
     v: 1,
@@ -177,10 +257,10 @@ export async function createHandshakeOffer(
     toDeviceId: peer.id,
     agreementPublicKey: agreementKeyPair.publicKey,
     agreementAlgorithm: agreementKeyPair.algorithm,
-    capabilities: [...capabilities].sort(),
+    capabilities: options.capabilities,
     cryptoSuite: crypto.suite,
     nonce: toBase64Url(crypto.randomBytes(16)),
-    createdAt: new Date().toISOString()
+    createdAt: new Date(options.now()).toISOString()
   };
 
   return {
@@ -194,10 +274,12 @@ export async function acceptHandshake(
   local: DeviceIdentity,
   trustStore: TrustStore,
   offer: SignedHandshake<HandshakeOfferPayload>,
-  capabilities: readonly string[] = ["trustlink.stream.v1"]
+  optionsInput: readonly string[] | HandshakeOptions = {}
 ): Promise<AcceptedHandshake> {
-  await verifyOfferForLocal(crypto, local, trustStore, offer);
+  const options = normalizeHandshakeOptions(optionsInput);
+  await verifyOfferForLocal(crypto, local, trustStore, offer, options);
 
+  const capability = selectSharedCapability(offer.payload.capabilities, options.capabilities);
   const agreementKeyPair = await crypto.generateAgreementKeyPair();
   const offerHash = await hashSigned(crypto, offer);
   const answerPayload: HandshakeAnswerPayload = {
@@ -208,14 +290,23 @@ export async function acceptHandshake(
     offerHash,
     agreementPublicKey: agreementKeyPair.publicKey,
     agreementAlgorithm: agreementKeyPair.algorithm,
-    capabilities: [...capabilities].sort(),
+    capabilities: [capability],
     cryptoSuite: crypto.suite,
     nonce: toBase64Url(crypto.randomBytes(16)),
-    createdAt: new Date().toISOString()
+    createdAt: new Date(options.now()).toISOString()
   };
   const answer = await signPayload(crypto, local, answerPayload);
   const sharedSecret = await crypto.sharedSecret(agreementKeyPair.privateKey, offer.payload.agreementPublicKey);
-  const session = await buildSession(crypto, local.id, offer.payload.from.id, sharedSecret, offer, answer);
+  const session = await buildSession(
+    crypto,
+    local.id,
+    offer.payload.from.id,
+    sharedSecret,
+    offer,
+    answer,
+    capability,
+    options.maxPlaintextBytes
+  );
 
   return { answer, session };
 }
@@ -225,21 +316,50 @@ export async function finishHandshake(
   local: DeviceIdentity,
   trustStore: TrustStore,
   pending: PendingHandshake,
-  answer: SignedHandshake<HandshakeAnswerPayload>
+  answer: SignedHandshake<HandshakeAnswerPayload>,
+  optionsInput: readonly string[] | HandshakeOptions = {}
 ): Promise<SecureSession> {
+  const options = normalizeHandshakeOptions(optionsInput);
   const peerRecord = trustStore.requireTrusted(answer.payload.from.id);
+  if (answer.payload.v !== 1 || answer.payload.kind !== "trustlink.handshake.answer") {
+    throw new Error("Unsupported handshake answer");
+  }
   if (answer.payload.toDeviceId !== local.id) {
     throw new Error("Handshake answer targets another device");
   }
+  assertFresh(answer.payload.createdAt, options, "Handshake answer");
+  if (answer.payload.cryptoSuite !== crypto.suite) {
+    throw new Error("Handshake answer crypto suite mismatch");
+  }
   if (answer.payload.offerHash !== await hashSigned(crypto, pending.offer)) {
     throw new Error("Handshake answer mismatch for pending offer");
+  }
+  if (!(await verifyPublicIdentity(crypto, answer.payload.from))) {
+    throw new Error("Handshake answer identity is invalid");
+  }
+  if (peerRecord.peer.publicKey !== answer.payload.from.publicKey) {
+    throw new Error("Handshake public key mismatch for trust record");
   }
   if (!(await verifySignedPayload(crypto, peerRecord.peer.publicKey, answer))) {
     throw new Error("Handshake answer signature is invalid");
   }
 
+  const capability = selectSharedCapability(pending.offer.payload.capabilities, answer.payload.capabilities);
+  if (!options.capabilities.includes(capability)) {
+    throw new Error("Handshake answer capability mismatch");
+  }
+
   const sharedSecret = await crypto.sharedSecret(pending.agreementKeyPair.privateKey, answer.payload.agreementPublicKey);
-  return buildSession(crypto, local.id, answer.payload.from.id, sharedSecret, pending.offer, answer);
+  return buildSession(
+    crypto,
+    local.id,
+    answer.payload.from.id,
+    sharedSecret,
+    pending.offer,
+    answer,
+    capability,
+    options.maxPlaintextBytes
+  );
 }
 
 export async function establishTrustedSession(
@@ -247,11 +367,12 @@ export async function establishTrustedSession(
   initiator: DeviceIdentity,
   initiatorTrust: TrustStore,
   responder: DeviceIdentity,
-  responderTrust: TrustStore
+  responderTrust: TrustStore,
+  optionsInput: readonly string[] | HandshakeOptions = {}
 ): Promise<{ initiatorSession: SecureSession; responderSession: SecureSession }> {
-  const pending = await createHandshakeOffer(crypto, initiator, toPublicIdentity(responder));
-  const accepted = await acceptHandshake(crypto, responder, responderTrust, pending.offer);
-  const initiatorSession = await finishHandshake(crypto, initiator, initiatorTrust, pending, accepted.answer);
+  const pending = await createHandshakeOffer(crypto, initiator, toPublicIdentity(responder), optionsInput);
+  const accepted = await acceptHandshake(crypto, responder, responderTrust, pending.offer, optionsInput);
+  const initiatorSession = await finishHandshake(crypto, initiator, initiatorTrust, pending, accepted.answer, optionsInput);
   return { initiatorSession, responderSession: accepted.session };
 }
 
@@ -259,19 +380,31 @@ async function verifyOfferForLocal(
   crypto: TrustLinkCrypto,
   local: DeviceIdentity,
   trustStore: TrustStore,
-  offer: SignedHandshake<HandshakeOfferPayload>
+  offer: SignedHandshake<HandshakeOfferPayload>,
+  options: NormalizedHandshakeOptions
 ): Promise<void> {
+  if (offer.payload.v !== 1 || offer.payload.kind !== "trustlink.handshake.offer") {
+    throw new Error("Unsupported handshake offer");
+  }
   if (offer.payload.toDeviceId !== local.id) {
     throw new Error("Handshake offer targets another device");
   }
+  assertFresh(offer.payload.createdAt, options, "Handshake offer");
+  if (offer.payload.cryptoSuite !== crypto.suite) {
+    throw new Error("Handshake offer crypto suite mismatch");
+  }
 
   const peerRecord = trustStore.requireTrusted(offer.payload.from.id);
+  if (!(await verifyPublicIdentity(crypto, offer.payload.from))) {
+    throw new Error("Handshake offer identity is invalid");
+  }
   if (peerRecord.peer.publicKey !== offer.payload.from.publicKey) {
     throw new Error("Handshake public key mismatch for trust record");
   }
   if (!(await verifySignedPayload(crypto, peerRecord.peer.publicKey, offer))) {
     throw new Error("Handshake offer signature is invalid");
   }
+  selectSharedCapability(offer.payload.capabilities, options.capabilities);
 }
 
 async function buildSession(
@@ -280,11 +413,17 @@ async function buildSession(
   peerDeviceId: string,
   sharedSecret: Uint8Array,
   offer: SignedHandshake<HandshakeOfferPayload>,
-  answer: SignedHandshake<HandshakeAnswerPayload>
+  answer: SignedHandshake<HandshakeAnswerPayload>,
+  capability: string,
+  maxPlaintextBytes: number
 ): Promise<SecureSession> {
-  const transcriptHash = await hashSigned(crypto, { payload: { offer, answer }, signature: "transcript", algorithm: "none" });
+  const transcriptHash = await hashSigned(crypto, {
+    payload: { offer, answer, capability, cryptoSuite: crypto.suite },
+    signature: "transcript",
+    algorithm: "none"
+  });
   const sessionId = `ses_${transcriptHash.slice(0, 32)}`;
-  const [sendKey, receiveKey] = await deriveDirectionalKeys(crypto, sharedSecret, localDeviceId, peerDeviceId, transcriptHash);
+  const material = await deriveDirectionalMaterial(crypto, sharedSecret, localDeviceId, peerDeviceId, transcriptHash);
 
   return new SecureSession(
     crypto,
@@ -293,30 +432,128 @@ async function buildSession(
     peerDeviceId,
     new Date().toISOString(),
     transcriptHash,
-    sendKey,
-    receiveKey
+    material.sendKey,
+    material.receiveKey,
+    material.sendNonceSeed,
+    material.receiveNonceSeed,
+    capability,
+    maxPlaintextBytes
   );
 }
 
-async function deriveDirectionalKeys(
+async function deriveDirectionalMaterial(
   crypto: TrustLinkCrypto,
   sharedSecret: Uint8Array,
   localDeviceId: string,
   peerDeviceId: string,
   transcriptHash: string
-): Promise<[Uint8Array, Uint8Array]> {
+): Promise<DirectionalMaterial> {
   const [firstId, secondId] = [localDeviceId, peerDeviceId].sort();
   const material = await crypto.hkdf(
     sharedSecret,
-    utf8(`trustlink:v1:${firstId}:${secondId}`),
-    utf8(`session:${transcriptHash}`),
-    64
+    utf8(`trustlink:v1:session:${transcriptHash}`),
+    utf8(`directions:${firstId}:${secondId}:${crypto.suite}`),
+    88
   );
-  const firstToSecond = material.slice(0, 32);
-  const secondToFirst = material.slice(32, 64);
+  const firstToSecondKey = material.slice(0, 32);
+  const secondToFirstKey = material.slice(32, 64);
+  const firstToSecondNonceSeed = material.slice(64, 76);
+  const secondToFirstNonceSeed = material.slice(76, 88);
   return localDeviceId === firstId
-    ? [firstToSecond, secondToFirst]
-    : [secondToFirst, firstToSecond];
+    ? {
+        sendKey: firstToSecondKey,
+        receiveKey: secondToFirstKey,
+        sendNonceSeed: firstToSecondNonceSeed,
+        receiveNonceSeed: secondToFirstNonceSeed
+      }
+    : {
+        sendKey: secondToFirstKey,
+        receiveKey: firstToSecondKey,
+        sendNonceSeed: secondToFirstNonceSeed,
+        receiveNonceSeed: firstToSecondNonceSeed
+      };
+}
+
+function normalizeHandshakeOptions(input: readonly string[] | HandshakeOptions = {}): NormalizedHandshakeOptions {
+  const options: HandshakeOptions = Array.isArray(input)
+    ? { capabilities: input as readonly string[] }
+    : input as HandshakeOptions;
+  const ttlMs = options.ttlMs ?? defaultHandshakeTtlMs;
+  const maxPlaintextBytes = options.maxPlaintextBytes ?? defaultMaxPlaintextBytes;
+
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) {
+    throw new Error("Handshake ttlMs must be a safe positive integer");
+  }
+  if (!Number.isSafeInteger(maxPlaintextBytes) || maxPlaintextBytes <= 0) {
+    throw new Error("maxPlaintextBytes must be a safe positive integer");
+  }
+
+  return {
+    capabilities: normalizeCapabilities(options.capabilities),
+    ttlMs,
+    now: options.now ?? Date.now,
+    maxPlaintextBytes
+  };
+}
+
+function normalizeCapabilities(capabilities: readonly string[] = [trustLinkStreamCapability]): readonly string[] {
+  const normalized = [...new Set(capabilities.map((capability) => capability.trim()).filter(Boolean))].sort();
+  if (normalized.length === 0) {
+    throw new Error("At least one capability is required");
+  }
+  return normalized;
+}
+
+function selectSharedCapability(left: readonly string[], right: readonly string[]): string {
+  const rightSet = new Set(right);
+  const capability = normalizeCapabilities(left).find((item) => rightSet.has(item));
+  if (!capability) {
+    throw new Error("No shared handshake capability");
+  }
+  return capability;
+}
+
+function assertFresh(createdAt: string, options: NormalizedHandshakeOptions, label: string): void {
+  const createdAtMs = Date.parse(createdAt);
+  if (!Number.isFinite(createdAtMs)) {
+    throw new Error(`${label} timestamp is invalid`);
+  }
+  const ageMs = Math.abs(options.now() - createdAtMs);
+  if (ageMs > options.ttlMs) {
+    throw new Error(`${label} timestamp is outside the allowed window`);
+  }
+}
+
+function nonceForSeq(seed: Uint8Array, seq: number): Uint8Array {
+  if (seed.length !== 12) {
+    throw new Error("Session nonce seed must be 12 bytes");
+  }
+  if (!Number.isSafeInteger(seq) || seq <= 0) {
+    throw new Error("Session seq must be a safe positive integer");
+  }
+
+  const nonce = copyBytes(seed);
+  let value = BigInt(seq);
+  for (let index = 11; index >= 4; index -= 1) {
+    nonce[index] = (nonce[index] ?? 0) ^ Number(value & 0xffn);
+    value >>= 8n;
+  }
+  return nonce;
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    diff |= (left[index] ?? 0) ^ (right[index] ?? 0);
+  }
+  return diff === 0;
+}
+
+function copyBytes(value: Uint8Array): Uint8Array {
+  return new Uint8Array(value);
 }
 
 async function hashSigned(crypto: TrustLinkCrypto, value: SignedHandshake<unknown>): Promise<string> {
