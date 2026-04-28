@@ -30,6 +30,13 @@ test("pairing invite round trip creates a trust record", async () => {
   assert.equal(await verifyPairingInvite(crypto, decoded), true);
   assert.equal(record.peer.id, a.id);
   assert.deepEqual(record.permissions, ["stream.read", "stream.write"]);
+  assert.equal(await verifyPairingInvite(crypto, { ...decoded, algorithm: "Changed" }), false);
+  assert.throws(() => parsePairingInvite(serializePairingInvite(invite), { maxSerializedBytes: 1 }), /exceeds/);
+  await assert.rejects(() => createPairingInvite(crypto, a, {
+    requestedPermissions: ["stream.write"],
+    offeredPermissions: ["stream.write"],
+    ttlMs: 0
+  }), /ttlMs/);
 });
 
 test("pairing summary is display-safe and renderer-agnostic", async () => {

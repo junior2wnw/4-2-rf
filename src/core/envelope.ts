@@ -49,6 +49,16 @@ export interface ByteEnvelopeValidationOptions {
 
 export const defaultMaxEnvelopePayloadBytes = 1024 * 1024;
 export const defaultMaxEnvelopeMetaBytes = 16 * 1024;
+const deliveryModes = new Set<DeliveryMode>([
+  "reliable",
+  "ordered",
+  "unordered",
+  "latest_only",
+  "durable",
+  "at_most_once",
+  "at_least_once",
+  "exactly_once"
+]);
 
 export function createByteEnvelope(input: ByteEnvelopeInput): ByteEnvelope {
   const envelope: ByteEnvelope = {
@@ -62,8 +72,8 @@ export function createByteEnvelope(input: ByteEnvelopeInput): ByteEnvelope {
       mode: input.delivery?.mode ?? "reliable",
       ack: input.delivery?.ack ?? true,
       resume: input.delivery?.resume ?? false,
-      ...(input.delivery?.ttlMs ? { ttlMs: input.delivery.ttlMs } : {}),
-      ...(input.delivery?.idempotencyKey ? { idempotencyKey: input.delivery.idempotencyKey } : {})
+      ...(input.delivery?.ttlMs !== undefined ? { ttlMs: input.delivery.ttlMs } : {}),
+      ...(input.delivery?.idempotencyKey !== undefined ? { idempotencyKey: input.delivery.idempotencyKey } : {})
     },
     meta: input.meta ?? {},
     payload: toBase64Url(input.payload),
@@ -101,6 +111,9 @@ export function validateByteEnvelope(
   if (!isNonEmptyString(envelope.contentType) || !isNonEmptyString(envelope.format)) {
     throw new Error("Envelope contentType and format are required");
   }
+  if (!deliveryModes.has(envelope.delivery.mode)) {
+    throw new Error(`Unsupported envelope delivery mode: ${String(envelope.delivery.mode)}`);
+  }
   if (!isBase64Url(envelope.payload)) {
     throw new Error("Envelope payload must be base64url");
   }
@@ -112,6 +125,9 @@ export function validateByteEnvelope(
   }
   if (envelope.delivery.ttlMs !== undefined && (!Number.isSafeInteger(envelope.delivery.ttlMs) || envelope.delivery.ttlMs <= 0)) {
     throw new Error("Envelope ttlMs must be a safe positive integer");
+  }
+  if (envelope.delivery.idempotencyKey !== undefined && !isNonEmptyString(envelope.delivery.idempotencyKey)) {
+    throw new Error("Envelope idempotencyKey must be non-empty");
   }
   if (envelope.delivery.mode === "exactly_once" && !envelope.delivery.idempotencyKey) {
     throw new Error("exactly_once delivery requires idempotencyKey");

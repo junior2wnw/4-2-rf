@@ -7,6 +7,7 @@ TrustLink Kernel is a security boundary, so the boundary stays small.
 - device identity is pinned to a public signing key
 - pairing creates an explicit local trust record
 - handshakes require trusted, active peers
+- session grants are derived from local trust records
 - every session uses fresh temporary agreement keys
 - directional keys and nonce seeds derive from the handshake transcript
 - sealed frames reject replay and sequence gaps

@@ -23,6 +23,8 @@ offer:
   permanent public identity
   temporary agreement public key
   capabilities
+  requested permissions
+  granted permissions
   crypto suite
   timestamp
   identity signature
@@ -32,13 +34,29 @@ answer:
   temporary agreement public key
   offer hash
   selected capability
+  requested permissions
+  granted permissions
   crypto suite
   timestamp
   identity signature
 ```
 
 The permanent key proves identity. The temporary agreement key creates fresh
-directional session keys and nonce seeds. Each reconnect creates a new session.
+directional session keys and nonce seeds. Permission grants come from local
+trust records. Each reconnect creates a new session.
+
+## Permissions
+
+```text
+channel.action
+channel.action:resource
+channel.*:resource
+*.*
+```
+
+A permission without a resource covers the action broadly. A permission with a
+resource covers only that resource unless `*` is used. Empty resources are
+invalid.
 
 ## Sealed Frame
 

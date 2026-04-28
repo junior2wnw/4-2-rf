@@ -9,6 +9,7 @@ It gives higher layers five primitives:
 identity
 trust
 pairing
+permissions
 encrypted session
 opaque byte envelope
 ```
@@ -56,6 +57,32 @@ const envelope = createByteEnvelope({
 
 Large data should be split by an adapter into bounded byte envelopes. The
 kernel is intentionally small and deterministic.
+
+## Permission Rule
+
+Trust is bounded by explicit grants. Each device keeps a local permission grant
+for every peer. A session receives the current grants during handshake and
+answers simple questions:
+
+```ts
+session.requireLocal({ channel: "stream", action: "write" });
+session.requirePeer({ channel: "device", action: "control", resource: "screen" });
+```
+
+Permissions are plain strings:
+
+```text
+text.send
+stream.write
+file.read:/photos
+device.control:screen
+api.call:/health
+*.*
+```
+
+Small scenarios can grant only one action. Larger scenarios can grant broader
+rights intentionally. Raising or lowering trust permissions is a local decision,
+and future sessions pick up the new grant.
 
 ## Quick Start
 
@@ -116,6 +143,7 @@ const opened = await responderSession.open(sealed);
 
 - stable device ids derive from public signing keys
 - trust is local, explicit, revocable, and permission-scoped
+- session permissions are negotiated from local trust records
 - every session uses fresh agreement keys
 - frame nonces derive from directional session material and sequence numbers
 - frames are authenticated with session, direction, sequence, and context data

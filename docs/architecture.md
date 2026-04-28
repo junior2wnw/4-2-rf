@@ -16,26 +16,31 @@ Move opaque bytes between trusted identities over fresh encrypted sessions.
    A peer becomes trusted through local consent. Trust is revocable and
    permission-scoped.
 
-3. Pairing
+3. Permissions
+   Permissions are small strings such as `text.send`, `api.call:/health`, or
+   `device.control:screen`. Trust records define the maximum local grant.
+
+4. Pairing
    An invite is a signed serializable payload. Any renderer or handoff channel
    can carry the same invite string.
 
-4. Session
+5. Session
    A trusted pair performs a signed handshake, creates temporary agreement keys,
-   derives directional keys and nonce seeds, then seals frames.
+   derives directional keys and nonce seeds, negotiates session grants, then
+   seals frames.
 
-5. Frame Codec
+6. Frame Codec
    A sealed frame is a bounded, versioned, authenticated container that any
    transport can move.
 
-6. Byte Envelope
+7. Byte Envelope
    A byte envelope carries `Uint8Array` payloads plus application metadata such
    as `contentType` and `format`.
 
-7. Link Space
+8. Link Space
    A link space is a versioned context over ordinary pairwise trusted links.
 
-8. Ports
+9. Ports
    Crypto, storage, and transport are interfaces. Node, browser, mobile,
    hardware, embedded, and server implementations connect through adapters.
 

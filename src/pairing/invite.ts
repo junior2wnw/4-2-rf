@@ -9,8 +9,12 @@ import {
   verifySignedPayload
 } from "../core/identity.js";
 import { TrustLinkCrypto } from "../core/crypto.js";
+import { PermissionPolicy } from "../core/permissions.js";
 import { TrustRecord, TrustStore } from "../core/trust.js";
 import { fromBase64Url, nowIso, randomId, readUtf8, stableJson, toBase64Url, utf8 } from "../utils/encoding.js";
+
+export const pairingInvitePrefix = "trustlink:v1:pair:";
+export const defaultMaxSerializedPairingInviteBytes = 64 * 1024;
 
 export interface PairingInvitePayload {
   readonly v: 1;
@@ -40,20 +44,29 @@ export interface AcceptPairingOptions {
   readonly permissionsOverride?: readonly string[];
 }
 
+export interface PairingInviteValidationOptions {
+  readonly maxSerializedBytes?: number;
+}
+
 export async function createPairingInvite(
   crypto: TrustLinkCrypto,
   identity: DeviceIdentity,
   options: PairingInviteOptions
 ): Promise<PairingInvite> {
   const ttlMs = options.ttlMs ?? 10 * 60 * 1000;
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) {
+    throw new Error("Pairing invite ttlMs must be a safe positive integer");
+  }
+  const requestedPermissions = new PermissionPolicy(options.requestedPermissions).list();
+  const offeredPermissions = new PermissionPolicy(options.offeredPermissions).list();
   const createdAt = nowIso();
   const payload: PairingInvitePayload = {
     v: 1,
     kind: "trustlink.pairing.invite",
     inviteId: randomId("inv"),
     from: toPublicIdentity(identity),
-    requestedPermissions: [...options.requestedPermissions].sort(),
-    offeredPermissions: [...options.offeredPermissions].sort(),
+    requestedPermissions,
+    offeredPermissions,
     capabilities: [...(options.capabilities ?? ["trustlink.stream.v1"])].sort(),
     createdAt,
     expiresAt: new Date(Date.now() + ttlMs).toISOString(),
@@ -64,17 +77,26 @@ export async function createPairingInvite(
 }
 
 export function serializePairingInvite(invite: PairingInvite): string {
-  return `trustlink:v1:pair:${toBase64Url(utf8(stableJson(invite)))}`;
+  return `${pairingInvitePrefix}${toBase64Url(utf8(stableJson(invite)))}`;
 }
 
-export function parsePairingInvite(value: string): PairingInvite {
-  const encoded = value.startsWith("trustlink:v1:pair:")
-    ? value.slice("trustlink:v1:pair:".length)
+export function parsePairingInvite(value: string, options: PairingInviteValidationOptions = {}): PairingInvite {
+  const maxSerializedBytes = options.maxSerializedBytes ?? defaultMaxSerializedPairingInviteBytes;
+  const encoded = value.startsWith(pairingInvitePrefix)
+    ? value.slice(pairingInvitePrefix.length)
     : value;
   if (!encoded) {
     throw new Error("Pairing invite payload missing");
   }
-  return JSON.parse(readUtf8(fromBase64Url(encoded))) as PairingInvite;
+  if (!Number.isSafeInteger(maxSerializedBytes) || maxSerializedBytes <= 0) {
+    throw new Error("maxSerializedBytes must be a safe positive integer");
+  }
+  if (encoded.length > maxSerializedBytes) {
+    throw new Error("Pairing invite payload exceeds configured limit");
+  }
+  const invite = JSON.parse(readUtf8(fromBase64Url(encoded))) as PairingInvite;
+  assertPairingInviteShape(invite);
+  return invite;
 }
 
 export async function verifyPairingInvite(
@@ -82,11 +104,17 @@ export async function verifyPairingInvite(
   invite: PairingInvite,
   at = Date.now()
 ): Promise<boolean> {
+  assertPairingInviteShape(invite);
   assertPublicIdentity(invite.payload.from);
   if (invite.payload.v !== 1 || invite.payload.kind !== "trustlink.pairing.invite") {
     return false;
   }
-  if (Date.parse(invite.payload.expiresAt) <= at) {
+  const createdAtMs = Date.parse(invite.payload.createdAt);
+  const expiresAtMs = Date.parse(invite.payload.expiresAt);
+  if (!Number.isFinite(createdAtMs) || !Number.isFinite(expiresAtMs) || expiresAtMs <= createdAtMs) {
+    return false;
+  }
+  if (expiresAtMs <= at) {
     return false;
   }
   if (!(await verifyPublicIdentity(crypto, invite.payload.from))) {
@@ -104,6 +132,9 @@ export async function acceptPairingInvite(
   if (!(await verifyPairingInvite(crypto, invite))) {
     throw new Error("Pairing invite verification failed");
   }
+  if (options.permissionsOverride) {
+    new PermissionPolicy(options.permissionsOverride);
+  }
 
   return localTrustStore.addTrustedPeer(
     invite.payload.from,
@@ -115,6 +146,28 @@ export async function acceptPairingInvite(
     },
     options.note !== undefined ? { note: options.note } : {}
   );
+}
+
+function assertPairingInviteShape(invite: unknown): asserts invite is PairingInvite {
+  if (typeof invite !== "object" || invite === null || Array.isArray(invite)) {
+    throw new Error("Pairing invite must be an object");
+  }
+  const candidate = invite as Partial<PairingInvite>;
+  if (typeof candidate.signature !== "string" || candidate.signature.length === 0) {
+    throw new Error("Pairing invite signature is required");
+  }
+  if (typeof candidate.algorithm !== "string" || candidate.algorithm.length === 0) {
+    throw new Error("Pairing invite algorithm is required");
+  }
+  if (typeof candidate.payload !== "object" || candidate.payload === null || Array.isArray(candidate.payload)) {
+    throw new Error("Pairing invite payload is required");
+  }
+  const payload = candidate.payload as Partial<PairingInvitePayload>;
+  if (!Array.isArray(payload.requestedPermissions) || !Array.isArray(payload.offeredPermissions)) {
+    throw new Error("Pairing invite permissions are required");
+  }
+  new PermissionPolicy(payload.requestedPermissions);
+  new PermissionPolicy(payload.offeredPermissions);
 }
 
 export function pairingInviteSummary(invite: PairingInvite): Record<string, string | string[]> {

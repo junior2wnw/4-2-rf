@@ -7,8 +7,14 @@ import {
   verifyPublicIdentity,
   verifySignedPayload
 } from "./identity.js";
-import { TrustStore } from "./trust.js";
+import { TrustRecord, TrustStore } from "./trust.js";
 import { validateSealedFrame } from "./frame.js";
+import {
+  PermissionPolicy,
+  PermissionRequest,
+  assertPermissionSubset,
+  intersectPermissions
+} from "./permissions.js";
 import { fromBase64Url, readUtf8, stableJson, stableJsonBytes, toBase64Url, utf8 } from "../utils/encoding.js";
 
 export const trustLinkStreamCapability = "trustlink.stream.v1";
@@ -18,6 +24,8 @@ export const maxSessionSeq = Number.MAX_SAFE_INTEGER;
 
 export interface HandshakeOptions {
   readonly capabilities?: readonly string[];
+  readonly requestedPermissions?: readonly string[];
+  readonly grantedPermissions?: readonly string[];
   readonly ttlMs?: number;
   readonly now?: () => number;
   readonly maxPlaintextBytes?: number;
@@ -31,6 +39,8 @@ export interface HandshakeOfferPayload {
   readonly agreementPublicKey: string;
   readonly agreementAlgorithm: string;
   readonly capabilities: readonly string[];
+  readonly requestedPermissions: readonly string[];
+  readonly grantedPermissions: readonly string[];
   readonly cryptoSuite: string;
   readonly nonce: string;
   readonly createdAt: string;
@@ -45,6 +55,8 @@ export interface HandshakeAnswerPayload {
   readonly agreementPublicKey: string;
   readonly agreementAlgorithm: string;
   readonly capabilities: readonly string[];
+  readonly requestedPermissions: readonly string[];
+  readonly grantedPermissions: readonly string[];
   readonly cryptoSuite: string;
   readonly nonce: string;
   readonly createdAt: string;
@@ -87,6 +99,8 @@ export interface SessionSnapshot {
   readonly receiveSeq: number;
   readonly cryptoSuite: string;
   readonly capability: string;
+  readonly localGrant: readonly string[];
+  readonly peerGrant: readonly string[];
   readonly maxPlaintextBytes: number;
 }
 
@@ -99,6 +113,8 @@ interface DirectionalMaterial {
 
 interface NormalizedHandshakeOptions {
   readonly capabilities: readonly string[];
+  readonly requestedPermissions: readonly string[];
+  readonly grantedPermissions?: readonly string[];
   readonly ttlMs: number;
   readonly now: () => number;
   readonly maxPlaintextBytes: number;
@@ -121,6 +137,8 @@ export class SecureSession {
     private readonly sendNonceSeed: Uint8Array,
     private readonly receiveNonceSeed: Uint8Array,
     private readonly capability: string,
+    private readonly localGrant: readonly string[],
+    private readonly peerGrant: readonly string[],
     private readonly maxPlaintextBytes: number
   ) {}
 
@@ -176,6 +194,22 @@ export class SecureSession {
     return readUtf8(await this.open(frame, utf8(context)));
   }
 
+  allowsLocal(request: PermissionRequest): boolean {
+    return new PermissionPolicy(this.peerGrant).allows(request);
+  }
+
+  requireLocal(request: PermissionRequest): void {
+    new PermissionPolicy(this.peerGrant).require(request);
+  }
+
+  allowsPeer(request: PermissionRequest): boolean {
+    return new PermissionPolicy(this.localGrant).allows(request);
+  }
+
+  requirePeer(request: PermissionRequest): void {
+    new PermissionPolicy(this.localGrant).require(request);
+  }
+
   snapshot(): SessionSnapshot {
     return {
       id: this.id,
@@ -187,6 +221,8 @@ export class SecureSession {
       receiveSeq: this.receiveSeq,
       cryptoSuite: this.crypto.suite,
       capability: this.capability,
+      localGrant: [...this.localGrant],
+      peerGrant: [...this.peerGrant],
       maxPlaintextBytes: this.maxPlaintextBytes
     };
   }
@@ -258,6 +294,8 @@ export async function createHandshakeOffer(
     agreementPublicKey: agreementKeyPair.publicKey,
     agreementAlgorithm: agreementKeyPair.algorithm,
     capabilities: options.capabilities,
+    requestedPermissions: options.requestedPermissions,
+    grantedPermissions: normalizeGrant(options.grantedPermissions ?? []),
     cryptoSuite: crypto.suite,
     nonce: toBase64Url(crypto.randomBytes(16)),
     createdAt: new Date(options.now()).toISOString()
@@ -277,9 +315,10 @@ export async function acceptHandshake(
   optionsInput: readonly string[] | HandshakeOptions = {}
 ): Promise<AcceptedHandshake> {
   const options = normalizeHandshakeOptions(optionsInput);
-  await verifyOfferForLocal(crypto, local, trustStore, offer, options);
+  const peerRecord = await verifyOfferForLocal(crypto, local, trustStore, offer, options);
 
   const capability = selectSharedCapability(offer.payload.capabilities, options.capabilities);
+  const localGrant = resolveLocalGrant(peerRecord.permissions, offer.payload.requestedPermissions, options.grantedPermissions);
   const agreementKeyPair = await crypto.generateAgreementKeyPair();
   const offerHash = await hashSigned(crypto, offer);
   const answerPayload: HandshakeAnswerPayload = {
@@ -291,6 +330,8 @@ export async function acceptHandshake(
     agreementPublicKey: agreementKeyPair.publicKey,
     agreementAlgorithm: agreementKeyPair.algorithm,
     capabilities: [capability],
+    requestedPermissions: options.requestedPermissions,
+    grantedPermissions: localGrant,
     cryptoSuite: crypto.suite,
     nonce: toBase64Url(crypto.randomBytes(16)),
     createdAt: new Date(options.now()).toISOString()
@@ -305,6 +346,8 @@ export async function acceptHandshake(
     offer,
     answer,
     capability,
+    localGrant,
+    normalizeGrant(offer.payload.grantedPermissions),
     options.maxPlaintextBytes
   );
 
@@ -348,6 +391,9 @@ export async function finishHandshake(
   if (!options.capabilities.includes(capability)) {
     throw new Error("Handshake answer capability mismatch");
   }
+  const localGrant = normalizeGrant(pending.offer.payload.grantedPermissions);
+  assertPermissionSubset(localGrant, trustStore.requireTrusted(answer.payload.from.id).permissions, "Handshake offer grants");
+  const peerGrant = normalizeGrant(answer.payload.grantedPermissions);
 
   const sharedSecret = await crypto.sharedSecret(pending.agreementKeyPair.privateKey, answer.payload.agreementPublicKey);
   return buildSession(
@@ -358,6 +404,8 @@ export async function finishHandshake(
     pending.offer,
     answer,
     capability,
+    localGrant,
+    peerGrant,
     options.maxPlaintextBytes
   );
 }
@@ -370,9 +418,11 @@ export async function establishTrustedSession(
   responderTrust: TrustStore,
   optionsInput: readonly string[] | HandshakeOptions = {}
 ): Promise<{ initiatorSession: SecureSession; responderSession: SecureSession }> {
-  const pending = await createHandshakeOffer(crypto, initiator, toPublicIdentity(responder), optionsInput);
+  const initiatorRecord = initiatorTrust.requireTrusted(responder.id);
+  const offerOptions = withDefaultGrantedPermissions(optionsInput, initiatorRecord.permissions);
+  const pending = await createHandshakeOffer(crypto, initiator, toPublicIdentity(responder), offerOptions);
   const accepted = await acceptHandshake(crypto, responder, responderTrust, pending.offer, optionsInput);
-  const initiatorSession = await finishHandshake(crypto, initiator, initiatorTrust, pending, accepted.answer, optionsInput);
+  const initiatorSession = await finishHandshake(crypto, initiator, initiatorTrust, pending, accepted.answer, offerOptions);
   return { initiatorSession, responderSession: accepted.session };
 }
 
@@ -382,7 +432,7 @@ async function verifyOfferForLocal(
   trustStore: TrustStore,
   offer: SignedHandshake<HandshakeOfferPayload>,
   options: NormalizedHandshakeOptions
-): Promise<void> {
+): Promise<TrustRecord> {
   if (offer.payload.v !== 1 || offer.payload.kind !== "trustlink.handshake.offer") {
     throw new Error("Unsupported handshake offer");
   }
@@ -405,6 +455,9 @@ async function verifyOfferForLocal(
     throw new Error("Handshake offer signature is invalid");
   }
   selectSharedCapability(offer.payload.capabilities, options.capabilities);
+  normalizeGrant(offer.payload.requestedPermissions);
+  normalizeGrant(offer.payload.grantedPermissions);
+  return peerRecord;
 }
 
 async function buildSession(
@@ -415,6 +468,8 @@ async function buildSession(
   offer: SignedHandshake<HandshakeOfferPayload>,
   answer: SignedHandshake<HandshakeAnswerPayload>,
   capability: string,
+  localGrant: readonly string[],
+  peerGrant: readonly string[],
   maxPlaintextBytes: number
 ): Promise<SecureSession> {
   const transcriptHash = await hashSigned(crypto, {
@@ -437,6 +492,8 @@ async function buildSession(
     material.sendNonceSeed,
     material.receiveNonceSeed,
     capability,
+    normalizeGrant(localGrant),
+    normalizeGrant(peerGrant),
     maxPlaintextBytes
   );
 }
@@ -488,11 +545,52 @@ function normalizeHandshakeOptions(input: readonly string[] | HandshakeOptions =
     throw new Error("maxPlaintextBytes must be a safe positive integer");
   }
 
-  return {
+  const normalized: NormalizedHandshakeOptions = {
     capabilities: normalizeCapabilities(options.capabilities),
+    requestedPermissions: normalizeGrant(options.requestedPermissions ?? []),
     ttlMs,
     now: options.now ?? Date.now,
     maxPlaintextBytes
+  };
+  return options.grantedPermissions === undefined
+    ? normalized
+    : {
+        ...normalized,
+        grantedPermissions: normalizeGrant(options.grantedPermissions)
+      };
+}
+
+function normalizeGrant(permissions: readonly string[]): readonly string[] {
+  return new PermissionPolicy(permissions).list();
+}
+
+function resolveLocalGrant(
+  maximum: readonly string[],
+  requested: readonly string[],
+  configured?: readonly string[]
+): readonly string[] {
+  const maximumGrant = normalizeGrant(maximum);
+  if (configured !== undefined) {
+    const grant = normalizeGrant(configured);
+    assertPermissionSubset(grant, maximumGrant, "Session grants");
+    return grant;
+  }
+  if (requested.length > 0) {
+    return intersectPermissions(requested, maximumGrant);
+  }
+  return maximumGrant;
+}
+
+function withDefaultGrantedPermissions(
+  input: readonly string[] | HandshakeOptions,
+  grantedPermissions: readonly string[]
+): HandshakeOptions {
+  const options: HandshakeOptions = Array.isArray(input)
+    ? { capabilities: input as readonly string[] }
+    : input as HandshakeOptions;
+  return {
+    ...options,
+    grantedPermissions: options.grantedPermissions ?? grantedPermissions
   };
 }
 

@@ -9,11 +9,28 @@ export interface ParsedPermission extends PermissionRequest {
 }
 
 export function parsePermission(raw: string): ParsedPermission {
-  const [left, resource] = raw.split(":", 2);
-  const [channel, action] = (left ?? "").split(".", 2);
+  if (typeof raw !== "string" || raw.trim() !== raw || raw.length === 0 || /\s/u.test(raw)) {
+    throw new Error(`Invalid permission: ${String(raw)}`);
+  }
+
+  const resourceParts = raw.split(":");
+  if (resourceParts.length > 2) {
+    throw new Error(`Invalid permission: ${raw}`);
+  }
+
+  const [left = "", resource] = resourceParts;
+  const permissionParts = left.split(".");
+  if (permissionParts.length !== 2) {
+    throw new Error(`Invalid permission: ${raw}`);
+  }
+
+  const [channel = "", action = ""] = permissionParts;
 
   if (!channel || !action) {
     throw new Error(`Invalid permission: ${raw}`);
+  }
+  if (resource !== undefined && resource.length === 0) {
+    throw new Error(`Invalid permission resource: ${raw}`);
   }
 
   return resource === undefined
@@ -27,8 +44,9 @@ export function permissionToString(request: PermissionRequest): string {
 
 export function matchesPermission(grant: string, request: PermissionRequest): boolean {
   const parsed = parsePermission(grant);
+  assertPermissionRequest(request);
 
-  if (parsed.channel !== request.channel) {
+  if (parsed.channel !== "*" && parsed.channel !== request.channel) {
     return false;
   }
 
@@ -70,4 +88,41 @@ export class PermissionPolicy {
       throw new Error(`Permission denied: ${permissionToString(request)}`);
     }
   }
+}
+
+export function assertPermissionRequest(request: PermissionRequest): void {
+  if (!isPermissionPart(request.channel) || !isPermissionPart(request.action)) {
+    throw new Error(`Invalid permission request: ${permissionToString(request)}`);
+  }
+  if (request.resource !== undefined && request.resource.length === 0) {
+    throw new Error(`Invalid permission request resource: ${permissionToString(request)}`);
+  }
+}
+
+export function assertPermissionSubset(
+  requested: readonly string[],
+  maximum: readonly string[],
+  label = "permissions"
+): void {
+  const maximumPolicy = new PermissionPolicy(maximum);
+  for (const permission of new PermissionPolicy(requested).list()) {
+    const parsed = parsePermission(permission);
+    if (!maximumPolicy.allows(parsed)) {
+      throw new Error(`${label} exceed the current grant: ${permission}`);
+    }
+  }
+}
+
+export function intersectPermissions(
+  requested: readonly string[],
+  maximum: readonly string[]
+): string[] {
+  const maximumPolicy = new PermissionPolicy(maximum);
+  return new PermissionPolicy(requested)
+    .list()
+    .filter((permission) => maximumPolicy.allows(parsePermission(permission)));
+}
+
+function isPermissionPart(value: string): boolean {
+  return typeof value === "string" && value.trim() === value && value.length > 0 && !/[.:\s]/u.test(value);
 }

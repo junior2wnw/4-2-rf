@@ -68,6 +68,24 @@ export class TrustStore {
     return record;
   }
 
+  updatePermissions(peerId: string, permissions: readonly string[], note?: string): TrustRecord {
+    const record = this.requireTrusted(peerId);
+    const updated: TrustRecord = {
+      ...record,
+      permissions: new PermissionPolicy(permissions).list(),
+      updatedAt: nowIso(),
+      version: record.version + 1,
+      ...(note !== undefined ? { note } : record.note !== undefined ? { note: record.note } : {})
+    };
+    this.records.set(peerId, updated);
+    return updated;
+  }
+
+  grantPermissions(peerId: string, permissions: readonly string[], note?: string): TrustRecord {
+    const record = this.requireTrusted(peerId);
+    return this.updatePermissions(peerId, [...record.permissions, ...permissions], note);
+  }
+
   get(peerId: string): TrustRecord | undefined {
     return this.records.get(peerId);
   }

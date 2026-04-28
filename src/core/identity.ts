@@ -89,7 +89,7 @@ export async function signPayload<TPayload>(
   identity: DeviceIdentity,
   payload: TPayload
 ): Promise<SignedPayload<TPayload>> {
-  const signature = await crypto.sign(identity.privateKey, stableJsonBytes(payload));
+  const signature = await crypto.sign(identity.privateKey, signedPayloadBytes(payload, identity.keyAlgorithm));
   return {
     payload,
     signature: toBase64Url(signature),
@@ -102,9 +102,13 @@ export async function verifySignedPayload<TPayload>(
   publicKey: string,
   signed: SignedPayload<TPayload>
 ): Promise<boolean> {
-  return crypto.verify(publicKey, stableJsonBytes(signed.payload), fromBase64Url(signed.signature));
+  return crypto.verify(publicKey, signedPayloadBytes(signed.payload, signed.algorithm), fromBase64Url(signed.signature));
 }
 
 function deriveDeviceIdFromHash(hash: Uint8Array): string {
   return `dev_${toBase64Url(hash).slice(0, 32)}`;
+}
+
+function signedPayloadBytes<TPayload>(payload: TPayload, algorithm: string): Uint8Array {
+  return stableJsonBytes({ algorithm, payload });
 }

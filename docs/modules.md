@@ -47,3 +47,7 @@ All of them move the same sealed frame shape.
 
 Application channels use byte envelopes for their own formats: RPC, CRDT,
 presence, cursors, telemetry, streaming media, and custom protocols.
+
+The kernel stays generic by treating those scenarios as permissions plus bytes:
+`text.send`, `file.read:/path`, `api.call:/method`, `device.control:screen`,
+or any namespace an adapter defines.

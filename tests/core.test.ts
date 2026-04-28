@@ -14,7 +14,8 @@ import {
   toPublicIdentity,
   validateByteEnvelope,
   trustLinkStreamCapability,
-  acceptHandshake
+  acceptHandshake,
+  parsePermission
 } from "../src/index.js";
 import { NodeTrustLinkCrypto } from "../src/platform/node-crypto.js";
 import { readUtf8, utf8 } from "../src/utils/encoding.js";
@@ -36,6 +37,9 @@ test("trusted devices exchange arbitrary encrypted bytes", async () => {
   const frame = await initiatorSession.seal(payload, utf8("binary"));
 
   assert.deepEqual(await responderSession.open(frame, utf8("binary")), payload);
+  assert.equal(initiatorSession.allowsLocal({ channel: "stream", action: "write" }), true);
+  assert.equal(initiatorSession.allowsLocal({ channel: "device", action: "control" }), false);
+  assert.throws(() => initiatorSession.requireLocal({ channel: "device", action: "control" }), /Permission denied/);
 });
 
 test("sessions reject replay, gaps, wrong context, and oversized frames", async () => {
@@ -61,6 +65,7 @@ test("sealed frame codec round trips and validates limits", async () => {
   assert.equal(first.seq, 1);
   assert.equal(second.seq, 2);
   assert.throws(() => parseSealedFrame("trustlink:v1:frame:@@@"), /base64url/);
+  assert.throws(() => parseSealedFrame(encoded, { maxSerializedBytes: 1 }), /exceeds/);
   assert.throws(() => serializeSealedFrame(first, { maxCiphertextBytes: 1 }), /exceeds/);
 });
 
@@ -128,6 +133,64 @@ test("permission policy allows exact and resource-scoped grants", () => {
   assert.equal(policy.allows({ channel: "api", action: "call", resource: "/health" }), true);
   assert.equal(policy.allows({ channel: "api", action: "call", resource: "/admin" }), false);
   assert.equal(policy.allows({ channel: "events", action: "subscribe", resource: "link" }), true);
+  assert.equal(new PermissionPolicy(["*.*"]).allows({ channel: "device", action: "control", resource: "screen" }), true);
+  assert.throws(() => new PermissionPolicy(["api.call:"]), /Invalid permission resource/);
+  assert.deepEqual(parsePermission("device.control:*"), {
+    raw: "device.control:*",
+    channel: "device",
+    action: "control",
+    resource: "*"
+  });
+});
+
+test("trust permissions can be raised or lowered for future sessions", async () => {
+  const a = await createDeviceIdentity(crypto, "A");
+  const b = await createDeviceIdentity(crypto, "B");
+  const aTrust = TrustStore.empty();
+
+  aTrust.addTrustedPeer(toPublicIdentity(b), ["text.send"], {
+    accepted: true,
+    approvedBy: "A:user"
+  });
+
+  assert.equal(aTrust.allows(b.id, { channel: "text", action: "send" }), true);
+  assert.equal(aTrust.allows(b.id, { channel: "device", action: "control" }), false);
+
+  aTrust.grantPermissions(b.id, ["device.control:*"]);
+  assert.equal(aTrust.allows(b.id, { channel: "device", action: "control", resource: "screen" }), true);
+
+  aTrust.updatePermissions(b.id, ["text.send"]);
+  assert.equal(aTrust.allows(b.id, { channel: "device", action: "control", resource: "screen" }), false);
+});
+
+test("session grants can be lower than the trust record", async () => {
+  const a = await createDeviceIdentity(crypto, "A");
+  const b = await createDeviceIdentity(crypto, "B");
+  const aTrust = TrustStore.empty();
+  const bTrust = TrustStore.empty();
+
+  aTrust.addTrustedPeer(toPublicIdentity(b), ["stream.write", "device.control:*"], {
+    accepted: true,
+    approvedBy: "A:user"
+  });
+  bTrust.addTrustedPeer(toPublicIdentity(a), ["stream.write", "device.control:*"], {
+    accepted: true,
+    approvedBy: "B:user"
+  });
+
+  const { initiatorSession, responderSession } = await establishTrustedSession(
+    crypto,
+    a,
+    aTrust,
+    b,
+    bTrust,
+    { grantedPermissions: ["stream.write"], requestedPermissions: ["stream.write"] }
+  );
+
+  assert.equal(initiatorSession.allowsPeer({ channel: "stream", action: "write" }), true);
+  assert.equal(initiatorSession.allowsPeer({ channel: "device", action: "control", resource: "screen" }), false);
+  assert.equal(responderSession.allowsLocal({ channel: "stream", action: "write" }), true);
+  assert.equal(responderSession.allowsLocal({ channel: "device", action: "control", resource: "screen" }), false);
 });
 
 test("byte envelopes preserve opaque payloads with bounded metadata", () => {
@@ -143,6 +206,12 @@ test("byte envelopes preserve opaque payloads with bounded metadata", () => {
   assert.equal(readUtf8(byteEnvelopePayload(envelope)), "opaque update");
   assert.throws(() => validateByteEnvelope({ ...envelope, delivery: { mode: "exactly_once" } }), /idempotencyKey/);
   assert.throws(() => byteEnvelopePayload(envelope, { maxPayloadBytes: 2 }), /exceeds/);
+  assert.throws(() => createByteEnvelope({
+    streamId: "ttl",
+    seq: 1,
+    payload: utf8("x"),
+    delivery: { ttlMs: 0 }
+  }), /ttlMs/);
 });
 
 test("link space keeps every member as ordinary trusted pairs", async () => {
