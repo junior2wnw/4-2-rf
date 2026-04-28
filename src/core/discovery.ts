@@ -1,5 +1,5 @@
 import { nowIso } from "../utils/encoding.js";
-import { TransportKind } from "./path.js";
+import { TransportId } from "./path.js";
 
 export type DiscoverySource =
   | "lan_mdns"
@@ -12,7 +12,7 @@ export type DiscoverySource =
 export interface DiscoveryEndpoint {
   readonly peerId: string;
   readonly endpoint: string;
-  readonly transport: TransportKind;
+  readonly transport: TransportId;
   readonly source: DiscoverySource;
   readonly capabilities: readonly string[];
   readonly observedAt: string;

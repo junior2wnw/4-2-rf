@@ -1,26 +1,23 @@
-export type TransportKind =
-  | "lan_quic"
-  | "internet_quic"
-  | "webrtc_datachannel"
-  | "https_stream"
-  | "relay";
+export type TransportId = string;
+export type PathTrait = string;
 
 export interface PathCandidate {
   readonly id: string;
-  readonly kind: TransportKind;
+  readonly kind: TransportId;
   readonly endpoint: string;
+  readonly traits?: readonly PathTrait[];
   readonly latencyMs: number;
   readonly lossPct: number;
   readonly estimatedBandwidthMbps: number;
   readonly metered: boolean;
-  readonly relay: boolean;
+  readonly forwarded: boolean;
   readonly local: boolean;
   readonly batteryCost: "low" | "medium" | "high";
   readonly policyAllowed: boolean;
 }
 
 export interface PathPolicy {
-  readonly allowRelay: boolean;
+  readonly allowForwarded: boolean;
   readonly allowMetered: boolean;
   readonly preferLocal: boolean;
   readonly maxLossPct: number;
@@ -33,7 +30,7 @@ export interface RankedPath extends PathCandidate {
 }
 
 export const defaultPathPolicy: PathPolicy = {
-  allowRelay: true,
+  allowForwarded: true,
   allowMetered: true,
   preferLocal: true,
   maxLossPct: 12,
@@ -46,7 +43,7 @@ export function rankPathCandidates(
 ): RankedPath[] {
   return candidates
     .filter((candidate) => candidate.policyAllowed)
-    .filter((candidate) => policy.allowRelay || !candidate.relay)
+    .filter((candidate) => policy.allowForwarded || !candidate.forwarded)
     .filter((candidate) => policy.allowMetered || !candidate.metered)
     .filter((candidate) => candidate.lossPct <= policy.maxLossPct)
     .filter((candidate) => candidate.estimatedBandwidthMbps >= policy.minBandwidthMbps)
@@ -64,12 +61,12 @@ function scorePath(candidate: PathCandidate, policy: PathPolicy): RankedPath {
 
   if (candidate.local && policy.preferLocal) {
     score += 18;
-    reasons.push("local-first");
+    reasons.push("local path");
   }
 
-  if (candidate.relay) {
+  if (candidate.forwarded) {
     score -= 14;
-    reasons.push("relay fallback");
+    reasons.push("forwarded path");
   }
 
   if (candidate.metered) {
@@ -77,14 +74,14 @@ function scorePath(candidate: PathCandidate, policy: PathPolicy): RankedPath {
     reasons.push("metered network");
   }
 
-  if (candidate.kind === "https_stream") {
-    score += 5;
-    reasons.push("policy-friendly tcp/443 fallback");
+  if (candidate.traits?.includes("low-latency")) {
+    score += 8;
+    reasons.push("low latency");
   }
 
-  if (candidate.kind === "internet_quic" || candidate.kind === "lan_quic") {
-    score += 8;
-    reasons.push("low-latency quic");
+  if (candidate.traits?.includes("stable")) {
+    score += 5;
+    reasons.push("stable path");
   }
 
   if (candidate.batteryCost === "high") {
@@ -104,39 +101,41 @@ export function demoPathCandidates(peerId: string): PathCandidate[] {
   return [
     {
       id: `${peerId}:lan`,
-      kind: "lan_quic",
-      endpoint: "udp://192.168.1.42:4433",
+      kind: "local.low-latency",
+      endpoint: "local://192.168.1.42",
+      traits: ["low-latency", "stable"],
       latencyMs: 7,
       lossPct: 0.1,
       estimatedBandwidthMbps: 240,
       metered: false,
-      relay: false,
+      forwarded: false,
       local: true,
       batteryCost: "low",
       policyAllowed: true
     },
     {
-      id: `${peerId}:https`,
-      kind: "https_stream",
-      endpoint: "https://edge.example.invalid/link",
+      id: `${peerId}:edge`,
+      kind: "edge.standard",
+      endpoint: "edge://link",
+      traits: ["stable"],
       latencyMs: 88,
       lossPct: 0.3,
       estimatedBandwidthMbps: 18,
       metered: false,
-      relay: false,
+      forwarded: false,
       local: false,
       batteryCost: "medium",
       policyAllowed: true
     },
     {
-      id: `${peerId}:relay`,
-      kind: "relay",
-      endpoint: "https://relay.example.invalid/frames",
+      id: `${peerId}:forwarder`,
+      kind: "forwarder.standard",
+      endpoint: "forward://frames",
       latencyMs: 132,
       lossPct: 0.5,
       estimatedBandwidthMbps: 10,
       metered: false,
-      relay: true,
+      forwarded: true,
       local: false,
       batteryCost: "medium",
       policyAllowed: true

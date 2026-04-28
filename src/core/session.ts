@@ -175,7 +175,7 @@ export class SecureSession {
 export function createHandshakeOffer(
   local: DeviceIdentity,
   peer: PublicDeviceIdentity,
-  capabilities: readonly string[] = ["messages", "files", "events", "https_stream"]
+  capabilities: readonly string[] = ["envelope.v1", "streams.v1"]
 ): PendingHandshake {
   const ephemeral = generateX25519Pair();
   const payload: HandshakeOfferPayload = {
@@ -199,7 +199,7 @@ export function acceptHandshake(
   local: DeviceIdentity,
   trustStore: TrustStore,
   offer: SignedHandshake<HandshakeOfferPayload>,
-  capabilities: readonly string[] = ["messages", "files", "events", "https_stream"]
+  capabilities: readonly string[] = ["envelope.v1", "streams.v1"]
 ): AcceptedHandshake {
   verifyOfferForLocal(local, trustStore, offer);
 

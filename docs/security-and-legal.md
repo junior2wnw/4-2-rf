@@ -27,7 +27,7 @@ Rules:
 
 - private keys stay on the device;
 - discovery candidates must prove their identity key;
-- relay services forward encrypted frames only;
+- forwarding services move encrypted frames only;
 - permissions are checked per action;
 - reconnect rotates session keys;
 - revocation kills active and future sessions.
@@ -41,7 +41,7 @@ Before real-world deployment:
 - OS keychain or TPM-backed private key storage;
 - fuzzing for frame and envelope parsing;
 - SQLite or equivalent atomic trust store;
-- abuse-rate limits on rendezvous and relay;
+- abuse-rate limits on public service surfaces;
 - privacy review for metadata retention;
 - clear user-facing consent and revocation flow.
 
@@ -52,7 +52,7 @@ Audit logs should include technical events only:
 - peer connected;
 - peer disconnected;
 - permission denied;
-- relay used;
+- forwarding path used;
 - transfer completed;
 - policy changed;
 - device revoked.

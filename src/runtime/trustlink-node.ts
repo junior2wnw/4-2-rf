@@ -69,7 +69,7 @@ export class TrustLinkNode {
       type: "path.selected",
       peerId: peer.identity.id,
       message: `Selected ${selectedPath.kind}`,
-      meta: { latencyMs: selectedPath.latencyMs, relay: selectedPath.relay }
+      meta: { latencyMs: selectedPath.latencyMs, forwarded: selectedPath.forwarded }
     });
     this.audit.record({
       type: "peer.connected",

@@ -43,7 +43,7 @@ export function createPairingInvite(
     from: toPublicIdentity(identity),
     requestedPermissions: [...options.requestedPermissions].sort(),
     offeredPermissions: [...options.offeredPermissions].sort(),
-    capabilities: [...(options.capabilities ?? ["messages", "files", "events"])].sort(),
+    capabilities: [...(options.capabilities ?? ["envelope.v1", "streams.v1"])].sort(),
     createdAt,
     expiresAt: new Date(Date.now() + ttlMs).toISOString(),
     nonce: randomId("nonce")

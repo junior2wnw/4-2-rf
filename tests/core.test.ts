@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createDeviceIdentity,
+  LinkSpace,
   createStateSyncPlan,
   establishTrustedSession,
   fileChunkEnvelope,
@@ -94,49 +95,50 @@ test("file chunks carry resume metadata", () => {
 test("path engine prefers local low-latency paths", () => {
   const ranked = rankPathCandidates([
     {
-      id: "relay",
-      kind: "relay",
-      endpoint: "https://relay.example.invalid",
+      id: "forwarded",
+      kind: "forwarder.custom",
+      endpoint: "forward://example",
       latencyMs: 120,
       lossPct: 1,
       estimatedBandwidthMbps: 10,
       metered: false,
-      relay: true,
+      forwarded: true,
       local: false,
       batteryCost: "medium",
       policyAllowed: true
     },
     {
-      id: "lan",
-      kind: "lan_quic",
-      endpoint: "udp://192.168.1.2:4433",
+      id: "local",
+      kind: "any.local.transport",
+      endpoint: "local://peer",
+      traits: ["low-latency"],
       latencyMs: 5,
       lossPct: 0,
       estimatedBandwidthMbps: 100,
       metered: false,
-      relay: false,
+      forwarded: false,
       local: true,
       batteryCost: "low",
       policyAllowed: true
     }
   ]);
 
-  assert.equal(ranked[0]?.id, "lan");
+  assert.equal(ranked[0]?.id, "local");
 });
 
 test("discovery returns only matching non-expired endpoints", async () => {
   const provider = new StaticDiscoveryProvider([
     manualEndpoint({
       peerId: "a",
-      endpoint: "https://a.example.invalid",
-      transport: "https_stream",
+      endpoint: "memory://a",
+      transport: "memory.frame",
       source: "manual",
       capabilities: ["messages"]
     }),
     manualEndpoint({
       peerId: "b",
-      endpoint: "https://b.example.invalid",
-      transport: "https_stream",
+      endpoint: "custom://b",
+      transport: "custom.transport",
       source: "manual",
       capabilities: ["messages"]
     })
@@ -174,4 +176,20 @@ test("token bucket denies bursts above capacity", () => {
   assert.equal(bucket.take().allowed, true);
   assert.equal(bucket.take().allowed, true);
   assert.equal(bucket.take().allowed, false);
+});
+
+test("link space makes the same pair link for every member", () => {
+  const a = createDeviceIdentity("A");
+  const b = createDeviceIdentity("B");
+  const c = createDeviceIdentity("C");
+
+  const space = LinkSpace.create("Lab", toPublicIdentity(a), ["events.sync"]);
+  space.addMember(toPublicIdentity(b), ["messages.send"]);
+  const snapshot = space.addMember(toPublicIdentity(c), ["metrics.write"]);
+
+  assert.equal(snapshot.members.length, 3);
+  assert.equal(snapshot.pairs.length, 3);
+  assert.equal(space.pairBetween(a.id, b.id).state, "ready");
+  assert.equal(space.pairBetween(a.id, c.id).state, "ready");
+  assert.equal(space.pairBetween(b.id, c.id).state, "ready");
 });

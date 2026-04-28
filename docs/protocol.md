@@ -17,7 +17,7 @@ Pairing creates a trust record:
 {
   "peer": "public device identity",
   "state": "trusted",
-  "permissions": ["messages.send", "files.send"],
+  "permissions": ["data.send", "events.sync"],
   "version": 1,
   "createdAt": "iso-time"
 }
@@ -47,8 +47,8 @@ The temporary X25519 key creates a fresh shared secret for this session. Reconne
   "v": 1,
   "msgId": "msg_...",
   "streamId": "str_...",
-  "channel": "files",
-  "type": "chunk",
+  "channel": "data",
+  "type": "frame",
   "contentType": "application/octet-stream",
   "encoding": "base64url",
   "delivery": {
@@ -58,8 +58,7 @@ The temporary X25519 key creates a fresh shared secret for this session. Reconne
     "idempotencyKey": "transfer:7"
   },
   "meta": {
-    "filename": "data.zip",
-    "chunkIndex": 7
+    "schema": "custom"
   },
   "payload": "..."
 }
@@ -84,4 +83,21 @@ peer public key blocked
 active sessions stopped
 future reconnect denied
 optional revocation pushed to other trusted devices
+```
+
+## Link Space
+
+```text
+one link context
+many trusted devices
+same pairwise link model
+one versioned snapshot
+```
+
+For three devices, the space contains three ordinary pairs:
+
+```text
+A <-> B
+A <-> C
+B <-> C
 ```

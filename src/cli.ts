@@ -5,7 +5,8 @@ import { createPairingInvite, encodePairingInvite, pairingInviteSummary } from "
 import { renderPairingQr } from "./pairing/qr.js";
 import { TrustLinkNode } from "./runtime/trustlink-node.js";
 import { TrustLinkApp } from "./sdk/app.js";
-import { createCoreModule } from "./sdk/core-module.js";
+import { createKernelModule } from "./sdk/kernel-module.js";
+import { createStarterModule } from "./sdk/starter-module.js";
 
 const command = process.argv[2] ?? "demo";
 
@@ -90,7 +91,7 @@ function runDemo(): void {
 async function runModules(): Promise<void> {
   const app = await TrustLinkApp.create({
     label: "TrustLink Node",
-    modules: [createCoreModule()]
+    modules: [createKernelModule(), createStarterModule()]
   });
 
   console.log(JSON.stringify({
@@ -110,8 +111,8 @@ async function runModules(): Promise<void> {
 async function runPairQr(): Promise<void> {
   const node = new TrustLinkNode(process.argv[3] ?? "TrustLink Node");
   const invite = createPairingInvite(node.identity, {
-    requestedPermissions: ["messages.send"],
-    offeredPermissions: ["messages.send", "files.send"],
+    requestedPermissions: ["data.send"],
+    offeredPermissions: ["data.send", "events.sync"],
     ttlMs: 10 * 60 * 1000
   });
   const rendered = await renderPairingQr(invite, undefined, { format: "terminal" });
@@ -126,7 +127,7 @@ async function runPairQr(): Promise<void> {
 async function runDoctor(): Promise<void> {
   const app = await TrustLinkApp.create({
     label: "TrustLink Doctor",
-    modules: [createCoreModule()]
+    modules: [createKernelModule(), createStarterModule()]
   });
 
   console.log(JSON.stringify({

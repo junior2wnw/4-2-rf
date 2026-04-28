@@ -17,22 +17,23 @@
 - Module registry.
 - UI contract.
 - QR invite renderer.
+- LinkSpace for two or more devices.
 
 ## Next
 
 - SQLite trust store adapter.
 - DPAPI, Keychain, Android Keystore, Secret Service, TPM key storage adapters.
-- QUIC transport adapter.
-- HTTPS stream transport adapter.
-- WebRTC DataChannel adapter.
-- Relay frame forwarder for encrypted frames.
+- Local transport adapter.
+- Edge transport adapter.
+- Forwarding transport adapter.
+- Custom transport adapter example.
 - Rendezvous service for temporary endpoint exchange.
 - Stream multiplexer with backpressure.
 - CLI pairing flow with QR/link payloads.
 
 ## Later
 
-- Trust groups with signed membership records.
+- LinkSpace records with signed membership snapshots.
 - Device migration without private key export.
 - Policy templates for family, team, server, and support use cases.
 - Formal protocol specification.

@@ -2,10 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   acceptPairingInvite,
-  createCoreModule,
   createDeviceIdentity,
   createHeadlessUiBridge,
+  createKernelModule,
   createPairingInvite,
+  createStarterModule,
   decodePairingInvite,
   encodePairingInvite,
   FileTransferService,
@@ -15,15 +16,18 @@ import {
   verifyPairingInvite
 } from "../src/index.js";
 
-test("core module registers default adapters", async () => {
+test("kernel module stays minimal and starter module adds optional adapters", async () => {
   const app = await TrustLinkApp.create({
     label: "A",
-    modules: [createCoreModule()]
+    modules: [createKernelModule(), createStarterModule()]
   });
 
   const adapters = app.modules.adapters();
 
-  assert.equal(app.modules.listModules()[0]?.id, "trustlink.core");
+  assert.deepEqual(app.modules.listModules().map((module) => module.id), [
+    "trustlink.kernel",
+    "trustlink.starter"
+  ]);
   assert.deepEqual(adapters.channelAdapters.map((adapter) => adapter.channel), ["messages", "files"]);
   assert.equal(adapters.qrRenderers.length, 1);
   assert.equal(adapters.keyStores.length, 1);

@@ -1,6 +1,6 @@
 # Modules
 
-TrustLink Core is built as a small kernel with extension points.
+TrustLink Core is built as a small kernel with extension points. The kernel stays small; modules carry concrete behavior.
 
 Users can add modules for:
 
@@ -36,11 +36,14 @@ export const myModule = defineTrustLinkModule({
 ## App Setup
 
 ```ts
-import { TrustLinkApp, createCoreModule } from "trustlink-core";
+import { TrustLinkApp, createKernelModule, createStarterModule } from "trustlink-core";
 
 const app = await TrustLinkApp.create({
   label: "Laptop",
-  modules: [createCoreModule()]
+  modules: [
+    createKernelModule(),
+    createStarterModule()
+  ]
 });
 
 console.log(app.modules.listModules());
@@ -74,4 +77,17 @@ const invite = createPairingInvite(identity, {
 });
 
 const qr = await renderPairingQr(invite, undefined, { format: "svg" });
+```
+
+## Link Space
+
+`LinkSpace` keeps one shared context for two or more devices. It stays simple: every participant is connected through the same pairwise model used by two devices.
+
+```ts
+const space = LinkSpace.create("My Link", toPublicIdentity(a), ["data.send"]);
+
+space.addMember(toPublicIdentity(b), ["data.send"]);
+space.addMember(toPublicIdentity(c), ["events.sync"]);
+
+console.log(space.snapshot().pairs);
 ```

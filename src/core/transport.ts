@@ -35,7 +35,7 @@ export class MemoryTransportConnection implements TransportConnection {
 }
 
 export class MemoryTransportAdapter implements TransportAdapter {
-  readonly kind = "https_stream" as const;
+  readonly kind = "memory.frame" as const;
 
   async connect(endpoint: DiscoveryEndpoint, signal?: AbortSignal): Promise<TransportConnection> {
     if (signal?.aborted) {
