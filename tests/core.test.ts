@@ -3,19 +3,36 @@ import assert from "node:assert/strict";
 import {
   LinkSpace,
   PermissionPolicy,
+  StaticDiscoveryProvider,
+  TokenBucket,
   TrustStore,
+  acceptHandshake,
+  cleanTrustLabel,
   byteEnvelopePayload,
   createByteEnvelope,
+  createCompactJoinCode,
   createDeviceIdentity,
   createHandshakeOffer,
+  createRoomAuth,
+  createStateSyncPlan,
+  createTrustLinkRoom,
+  createWebJoinKeyPair,
+  createWebRoomAuth,
   establishTrustedSession,
+  exportWebJoinPublicKey,
+  manualEndpoint,
+  openBytesWithRoomSecret,
+  openRoomSecretFromWebJoin,
+  parseCompactJoinCode,
+  parsePermission,
   parseSealedFrame,
+  rankPathCandidates,
+  sealBytesWithRoomSecret,
+  sealRoomSecretForWebJoin,
   serializeSealedFrame,
   toPublicIdentity,
   validateByteEnvelope,
-  trustLinkStreamCapability,
-  acceptHandshake,
-  parsePermission
+  trustLinkStreamCapability
 } from "../src/index.js";
 import { NodeTrustLinkCrypto } from "../src/platform/node-crypto.js";
 import { readUtf8, utf8 } from "../src/utils/encoding.js";
@@ -212,6 +229,123 @@ test("byte envelopes preserve opaque payloads with bounded metadata", () => {
     payload: utf8("x"),
     delivery: { ttlMs: 0 }
   }), /ttlMs/);
+});
+
+test("room helpers keep join codes compact and app-neutral", async () => {
+  const room = createTrustLinkRoom({ label: "  Device   A  ", now: "2026-04-29T00:00:00.000Z" });
+  const code = createCompactJoinCode(room.id, room.label);
+  const parsed = parseCompactJoinCode(code);
+
+  assert.equal(room.label, "Device A");
+  assert.equal(cleanTrustLabel(""), ".");
+  assert.equal(parsed.roomId, room.id);
+  assert.equal(parsed.label, "Device A");
+  assert.equal(
+    await createRoomAuth(crypto, room, { namespace: "demo.room-auth.v1" }),
+    await createRoomAuth(crypto, { id: room.id, secret: room.secret }, { namespace: "demo.room-auth.v1" })
+  );
+});
+
+test("web crypto adapter pairs and opens room bytes", async () => {
+  const room = createTrustLinkRoom({ label: "browser" });
+  const requester = await createWebJoinKeyPair();
+  const accepted = await sealRoomSecretForWebJoin(
+    room.secret,
+    await exportWebJoinPublicKey(requester),
+    "host"
+  );
+  const openedSecret = await openRoomSecretFromWebJoin(requester.privateKey, accepted);
+  const sealed = await sealBytesWithRoomSecret(openedSecret, utf8("any bytes"));
+
+  assert.equal(openedSecret, room.secret);
+  assert.equal(readUtf8(await openBytesWithRoomSecret(room.secret, sealed.nonce, sealed.ciphertext)), "any bytes");
+  assert.equal(await createWebRoomAuth(room), await createWebRoomAuth({ id: room.id, secret: room.secret }));
+});
+
+test("path engine prefers local low-latency paths", () => {
+  const ranked = rankPathCandidates([
+    {
+      id: "forwarded",
+      kind: "forwarder.custom",
+      endpoint: "forward://example",
+      latencyMs: 120,
+      lossPct: 1,
+      estimatedBandwidthMbps: 10,
+      metered: false,
+      forwarded: true,
+      local: false,
+      batteryCost: "medium",
+      policyAllowed: true
+    },
+    {
+      id: "local",
+      kind: "any.local.transport",
+      endpoint: "local://peer",
+      traits: ["low-latency"],
+      latencyMs: 5,
+      lossPct: 0,
+      estimatedBandwidthMbps: 100,
+      metered: false,
+      forwarded: false,
+      local: true,
+      batteryCost: "low",
+      policyAllowed: true
+    }
+  ]);
+
+  assert.equal(ranked[0]?.id, "local");
+});
+
+test("discovery returns only matching non-expired endpoints", async () => {
+  const provider = new StaticDiscoveryProvider([
+    manualEndpoint({
+      peerId: "a",
+      endpoint: "memory://a",
+      transport: "memory.frame",
+      source: "manual",
+      capabilities: ["trustlink.stream.v1"]
+    }),
+    manualEndpoint({
+      peerId: "b",
+      endpoint: "custom://b",
+      transport: "custom.transport",
+      source: "manual",
+      capabilities: ["trustlink.stream.v1"]
+    })
+  ]);
+
+  const endpoints = await provider.discover("a");
+  assert.equal(endpoints.length, 1);
+  assert.equal(endpoints[0]?.peerId, "a");
+});
+
+test("state sync asks for missing durable work", () => {
+  const plan = createStateSyncPlan(
+    {
+      streamId: "s1",
+      deliveredSeq: 2,
+      durableMessageIds: ["m1"],
+      resumableTransferIds: []
+    },
+    {
+      streamId: "s1",
+      deliveredSeq: 5,
+      durableMessageIds: ["m1", "m2"],
+      resumableTransferIds: ["t1"]
+    }
+  );
+
+  assert.equal(plan.requestFromSeq, 3);
+  assert.deepEqual(plan.replayDurableMessageIds, ["m2"]);
+  assert.deepEqual(plan.resumeTransferIds, ["t1"]);
+});
+
+test("token bucket denies bursts above capacity", () => {
+  const bucket = new TokenBucket(2, 1);
+
+  assert.equal(bucket.take().allowed, true);
+  assert.equal(bucket.take().allowed, true);
+  assert.equal(bucket.take().allowed, false);
 });
 
 test("link space keeps every member as ordinary trusted pairs", async () => {

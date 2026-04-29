@@ -26,8 +26,10 @@ Inside the kernel:
 - pairing invite serialization
 - signed session handshake
 - encrypted frame codec
+- room secrets and compact join codes
 - opaque byte envelopes
 - pairwise link spaces
+- path ranking, discovery metadata, recovery plans, and rate limits
 - crypto, transport, and storage ports
 
 Outside the kernel:
@@ -39,6 +41,32 @@ Outside the kernel:
 - large-object chunking
 - platform key storage
 - database adapters
+
+## Module Shape
+
+The package is a small SDK. Applications call the kernel methods and attach
+their own UI, storage, and transport adapters around them.
+
+```ts
+import {
+  createCompactJoinCode,
+  createTrustLinkRoom,
+  parseCompactJoinCode
+} from "trustlink-kernel";
+import {
+  createWebJoinKeyPair,
+  exportWebJoinPublicKey,
+  openBytesWithRoomSecret,
+  sealBytesWithRoomSecret,
+  sealRoomSecretForWebJoin
+} from "trustlink-kernel/platform/web";
+```
+
+`createTrustLinkRoom` creates an opaque room id and secret.
+`createCompactJoinCode` produces the small QR payload. The web adapter can then
+open an encrypted room secret and encrypt arbitrary byte arrays. The kernel does
+not know whether those bytes are text, files, CRDT updates, commands, telemetry,
+or any other format.
 
 ## Payload Rule
 

@@ -9,6 +9,9 @@
     "url": "git+https://github.com/junior2wnw/4-2-rf.git"
   },
   "sideEffects": false,
+  "bin": {
+    "trustlink": "./dist/cli.js"
+  },
   "files": [
     "dist",
     "README.md",
@@ -23,6 +26,10 @@
     "./platform/node": {
       "types": "./dist/platform/node-crypto.d.ts",
       "default": "./dist/platform/node-crypto.js"
+    },
+    "./platform/web": {
+      "types": "./dist/platform/web-crypto.d.ts",
+      "default": "./dist/platform/web-crypto.js"
     }
   },
   "engines": {
@@ -33,7 +40,10 @@
     "build": "pnpm clean && tsc -p tsconfig.json",
     "check": "pnpm language && pnpm typecheck && pnpm test && pnpm build",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "demo": "pnpm build && node dist/cli.js demo",
+    "doctor": "pnpm build && node dist/cli.js doctor",
     "language": "node --import tsx scripts/check-language.ts",
+    "prepare": "pnpm build",
     "prepack": "pnpm check",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
