@@ -23,6 +23,7 @@
     "dev": "node --import tsx src/cli.ts demo",
     "doctor": "pnpm build && node dist/cli.js doctor",
     "language": "node --import tsx scripts/check-language.ts",
+    "prepare": "pnpm build",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
