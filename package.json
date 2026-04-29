@@ -6,7 +6,8 @@
   "description": "A small universal kernel for consent-based encrypted byte streams between trusted identities.",
   "exports": {
     ".": "./dist/index.js",
-    "./platform/node": "./dist/platform/node-crypto.js"
+    "./platform/node": "./dist/platform/node-crypto.js",
+    "./platform/web": "./dist/platform/web-crypto.js"
   },
   "bin": {
     "trustlink": "./dist/cli.js"
