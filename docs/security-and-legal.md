@@ -2,6 +2,26 @@
 
 TrustLink Kernel is a security boundary, so the boundary stays small.
 
+## Legal Boundary
+
+This repository is public source, outside OSI-approved open source. The canonical
+license is `LICENSE` in the repository root.
+
+The intent is:
+
+- the kernel owns technology, protocol, crypto, recovery, discovery, and
+  reliability primitives;
+- applications own names, UI, content, business flows, concrete transports,
+  hosted services, and app-specific behavior;
+- Alik "Lord" Gaynetdinov keeps ownership of the kernel;
+- commercial users that reach 10,000,000 RUB in trailing twelve-month gross
+  revenue must sign a commercial license before continued live use;
+- default commercial economics are 7% attributable gross revenue plus 5% fully
+  diluted equity, unless a signed agreement says otherwise.
+
+Avoid describing this repository as MIT, Apache, public domain, royalty-free
+for large commercial use, or OSI open source.
+
 ## Kernel Security Properties
 
 - device identity is pinned to a public signing key

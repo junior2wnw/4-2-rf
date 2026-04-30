@@ -134,14 +134,14 @@ async function aesGcmDecrypt(key: CryptoKey, nonce: string, ciphertext: string):
 function subtle(): SubtleCrypto {
   const api = cryptoApi().subtle;
   if (!api) {
-    throw new Error("Web Crypto subtle API is not available");
+    throw new Error("Web Crypto subtle API is unavailable");
   }
   return api;
 }
 
 function cryptoApi(): Crypto {
   if (!globalThis.crypto) {
-    throw new Error("Web Crypto API is not available");
+    throw new Error("Web Crypto API is unavailable");
   }
   return globalThis.crypto;
 }

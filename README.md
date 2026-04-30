@@ -64,9 +64,9 @@ import {
 
 `createTrustLinkRoom` creates an opaque room id and secret.
 `createCompactJoinCode` produces the small QR payload. The web adapter can then
-open an encrypted room secret and encrypt arbitrary byte arrays. The kernel does
-not know whether those bytes are text, files, CRDT updates, commands, telemetry,
-or any other format.
+open an encrypted room secret and encrypt arbitrary byte arrays. The kernel
+treats those bytes as opaque regardless of whether they are text, files, CRDT
+updates, commands, telemetry, or any other format.
 
 ## Payload Rule
 
@@ -117,6 +117,8 @@ and future sessions pick up the new grant.
 ```bash
 pnpm install
 pnpm check
+pnpm doctor
+pnpm demo
 ```
 
 Minimal Node example:
@@ -178,6 +180,19 @@ const opened = await responderSession.open(sealed);
 - replay and sequence gaps are rejected inside the session
 - frame and envelope sizes are bounded by configuration
 - platform crypto, storage, and transport stay replaceable
+
+## License Shape
+
+TrustLink Kernel is publicly visible source code under the TrustLink Kernel
+Public Source License 1.0. It sits outside MIT, Apache, public domain, and
+OSI-approved open source terms.
+
+The license is designed to keep small use easy while protecting the creator:
+once a company or covered offering reaches 10,000,000 RUB in trailing
+twelve-month gross revenue, continued live commercial use requires a
+signed commercial license with default economics of 7% attributable gross
+revenue plus 5% fully diluted equity, unless Alik "Lord" Gaynetdinov signs
+different terms.
 
 ## Maturity
 

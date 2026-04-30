@@ -1,21 +1,177 @@
-MIT License
+TrustLink Kernel Public Source License 1.0
 
-Copyright (c) 2026 TrustLink Kernel contributors
+Copyright (c) 2026 Alik "Lord" Gaynetdinov
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This license makes the source code publicly available, but it is not an
+OSI-approved open source license. Commercial use by larger companies requires
+royalties and an equity participation for the copyright owner.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Definitions
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT WITHOUT LIMITATION THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+"Covered Software" means TrustLink Kernel and any source, object, build,
+documentation, interface, protocol, or derivative work distributed with this
+repository.
+
+"Licensor" means Alik "Lord" Gaynetdinov and any legal entity or successor
+authorized by him to license the Covered Software.
+
+"Licensee" means any person or entity exercising rights under this license,
+including its affiliates, subsidiaries, contractors, and controlled entities.
+
+"Use" means to copy, run, modify, compile, publish, distribute, host, embed,
+provide over a network, or otherwise exploit the Covered Software.
+
+"Commercial Use" means Use that directly or indirectly supports revenue,
+funding, paid products, paid services, internal business operations, hosted
+services, resale, consulting delivery, advertising, marketplace activity, or
+any other business advantage.
+
+"Gross Revenue" means all revenue, receipts, service fees, subscription fees,
+license fees, advertising revenue, marketplace fees, transaction fees, grants,
+and other consideration received by Licensee and its affiliates before costs,
+taxes, refunds, chargebacks, or expenses are deducted.
+
+"Covered Offering" means any product, service, platform, company, application,
+device, network, hosted system, or internal system that uses, embeds, depends
+on, or is materially enabled by the Covered Software.
+
+"Revenue Threshold" means 10,000,000 Russian rubles in Gross Revenue during
+any trailing twelve-month period, or the equivalent in another currency using
+the official exchange rate published by the Central Bank of the Russian
+Federation on the last day of that period.
+
+2. Public Grant Below The Threshold
+
+Subject to this license, Licensor grants Licensee a non-exclusive, worldwide,
+royalty-free right to Use the Covered Software for evaluation, research,
+education, non-commercial projects, internal development, and Commercial Use
+while Licensee and its affiliates remain below the Revenue Threshold.
+
+This grant does not transfer ownership. Licensor keeps all copyright, patent,
+trade secret, trademark, and other rights not expressly granted here.
+
+3. Commercial Royalty Trigger
+
+If Licensee or any Covered Offering reaches or exceeds the Revenue Threshold,
+Licensee must obtain a signed commercial license from Licensor before continued
+production Commercial Use. If the threshold is crossed after lawful use began,
+Licensee has thirty calendar days to contact Licensor and execute the required
+commercial license.
+
+After that thirty-day period, any production Commercial Use is unlicensed until
+a commercial license is signed and all overdue amounts are paid.
+
+4. Default Commercial Terms
+
+Unless Licensor signs different written terms, the required commercial license
+must include all of the following economics:
+
+a. Royalty. Licensee must pay Licensor seven percent (7%) of Gross Revenue
+attributable to each Covered Offering. If Licensee does not separately track
+attributable revenue in reliable accounting records, Licensee must pay two
+percent (2%) of Licensee's total Gross Revenue instead.
+
+b. Equity. If the Covered Offering is owned or operated by a private company,
+Licensee must cause that company to issue Licensor five percent (5%) of the
+company's fully diluted equity, economically equivalent to founder common
+equity and protected from dilution on terms no worse than the best founder or
+early employee class then outstanding. If equity issuance is legally impossible
+or the company is publicly listed, Licensee must sign an economically
+equivalent cash, token, warrant, synthetic equity, or revenue-share arrangement
+acceptable to Licensor before continued production Commercial Use.
+
+c. Reporting. Royalties are calculated quarterly and paid within thirty days
+after each calendar quarter. Licensee must provide a good-faith revenue report
+showing Covered Offerings, calculation method, currency conversion, and payment
+amount.
+
+d. Records and audit. Licensee must keep accurate records for at least three
+years. No more than once per year, Licensor may audit records relevant to this
+license through an independent professional under confidentiality obligations.
+If an audit finds an underpayment above five percent (5%), Licensee must pay
+the audit cost in addition to the underpaid amount.
+
+5. Attribution And Notices
+
+Licensee must keep this license, copyright notices, and provenance notices in
+all source distributions and reasonably accessible documentation for binary,
+hosted, or embedded distributions.
+
+Licensee may not state or imply that the Covered Software is OSI-approved open
+source, MIT licensed, Apache licensed, public domain, or free of commercial
+royalty obligations.
+
+6. Restrictions
+
+Licensee may not:
+
+a. remove or obscure copyright, license, or commercial obligation notices;
+
+b. use the names "TrustLink", "TrustLink Kernel", "Alik Lord Gaynetdinov", or
+any confusingly similar name as a product name, company name, endorsement, or
+trademark without written permission;
+
+c. sell, sublicense, or provide the Covered Software as a standalone competing
+technology core to third parties after reaching the Revenue Threshold unless a
+commercial license expressly allows it;
+
+d. route revenue, users, assets, or operations through affiliates, contractors,
+resellers, shell entities, open-core wrappers, or separate product labels to
+avoid the Revenue Threshold, royalties, or equity obligation;
+
+e. use the Covered Software in a way that violates law or intentionally enables
+unauthorized access, malware, credential theft, or unlawful surveillance.
+
+7. Contributions
+
+Any contribution intentionally submitted to Licensor for inclusion in the
+Covered Software is licensed to Licensor under a perpetual, worldwide,
+irrevocable, royalty-free, sublicensable license to use, modify, relicense,
+commercialize, and distribute the contribution as part of the Covered Software.
+The contributor confirms that it has the right to grant this permission.
+
+8. Patent Grant And Patent Retaliation
+
+Each contributor grants Licensor and Licensees a non-exclusive patent license
+to make, use, sell, offer for sale, import, and otherwise exploit the
+contribution as included in the Covered Software. If Licensee starts or
+maintains a patent claim alleging that the Covered Software infringes a patent,
+all patent licenses granted to Licensee under this license terminate
+immediately.
+
+9. Termination
+
+Rights under this license terminate automatically if Licensee breaches the
+license and does not cure the breach within fifteen days after written notice.
+For deliberate threshold avoidance, unpaid production Commercial Use above the
+Revenue Threshold, or removal of license notices, termination is immediate.
+
+After termination, Licensee must stop using and distributing the Covered
+Software, delete hosted copies under its control, and pay any unpaid royalties,
+audit costs, interest, and enforcement costs allowed by law.
+
+10. Dual Licensing
+
+Licensor may offer different commercial, private, enterprise, or partnership
+licenses. A separate signed agreement controls only for the parties and scope
+identified in that agreement.
+
+11. No Warranty
+
+THE COVERED SOFTWARE IS PROVIDED "AS IS" AND WITHOUT WARRANTIES OF ANY KIND,
+INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+TITLE, NON-INFRINGEMENT, SECURITY, OR ERROR-FREE OPERATION.
+
+12. Limitation Of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, LICENSOR AND CONTRIBUTORS ARE NOT
+LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE
+DAMAGES, LOST PROFITS, LOST DATA, BUSINESS INTERRUPTION, OR SECURITY INCIDENTS
+ARISING FROM OR RELATING TO THE COVERED SOFTWARE.
+
+13. Governing Law
+
+Unless a signed commercial license says otherwise, this license is governed by
+the laws of the Russian Federation, without regard to conflict-of-law rules.
+Courts with jurisdiction over Licensor's principal domicile have exclusive
+jurisdiction, unless mandatory law requires another forum.

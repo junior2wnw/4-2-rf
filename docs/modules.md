@@ -51,3 +51,18 @@ presence, cursors, telemetry, streaming media, and custom protocols.
 The kernel stays generic by treating those scenarios as permissions plus bytes:
 `text.send`, `file.read:/path`, `api.call:/method`, `device.control:screen`,
 or any namespace an adapter defines.
+
+## Reliability Primitives
+
+These modules stay in the kernel because they are technology primitives rather
+than app behavior:
+
+- `path` ranks candidate transports without owning any concrete transport;
+- `discovery` normalizes endpoint discovery records and provider composition;
+- `recovery` models reconnect, degraded, revoked, and resumable states;
+- `state-sync` plans replay and resume gaps between stream checkpoints;
+- `abuse-protection` provides local token-bucket rate decisions;
+- `audit` records structured security and reliability events.
+
+Applications may render, persist, transmit, or monetize these signals, but the
+decision logic belongs here.

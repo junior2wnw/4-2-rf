@@ -37,10 +37,18 @@ Move opaque bytes between trusted identities over fresh encrypted sessions.
    A byte envelope carries `Uint8Array` payloads plus application metadata such
    as `contentType` and `format`.
 
-8. Link Space
+8. Room And Join Codes
+   Room helpers create opaque room ids, secrets, compact join codes, and auth
+   material without knowing how an app renders or transports the invite.
+
+9. Reliability
+   Path ranking, discovery metadata, recovery snapshots, state-sync planning,
+   audit records, and token buckets stay generic and app-neutral.
+
+10. Link Space
    A link space is a versioned context over ordinary pairwise trusted links.
 
-9. Ports
+11. Ports
    Crypto, storage, and transport are interfaces. Node, browser, mobile,
    hardware, embedded, and server implementations connect through adapters.
 

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "A small universal kernel for consent-based encrypted byte streams between trusted identities.",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/junior2wnw/4-2-rf.git"
