@@ -125,7 +125,8 @@ Useful capability families:
 - `job.status`
 - `job.stop`
 - `context.refresh`
-- `close`
+- `window.collapse`
+- `window.resize`
 
 The kernel module intentionally models names, origin validation, route
 classification, frame-source extraction, and permission strings. Concrete
@@ -146,12 +147,22 @@ normalizeAppSurfaceInstallRequest({
   url: "/apps/account-console/index.html",
   // Or inlineHtml for a small generated app.
   scope: "account",
+  display: {
+    layout: "half",
+    height: "clamp(280px, 50svh, 680px)"
+  },
   open: true,
   capabilities: ["chat.append", "terminal.run"]
 }, {
   baseUrl: "https://example.test"
 });
 ```
+
+`display.layout` is a shell hint rather than an authority grant. Supported layouts are
+`half`, `compact`, `large`, `full`, and `floating`. A surface can later ask the
+shell to change layout through a nonce-bound bridge message such as
+`window.resize`; the shell still clamps width and height and keeps at least a
+collapse control outside the surface content.
 
 Use `allowKernelProxy: true` only after the shell has a same-origin proxy or
 tunnel for intent URLs such as `trustlink://surface/...`. Until then, those
@@ -171,7 +182,10 @@ An application shell that supports app surfaces should:
 6. Convert each requested action into an explicit capability check.
 7. Execute device work through trusted link capabilities, without giving the
    surface raw device secrets.
-8. Record proof for mutating, long-running, or remote-device actions.
+8. Keep shell chrome authoritative: no surface-owned close button, always keep
+   a shell collapse affordance, and treat window resize/full/floating requests
+   as clamped hints.
+9. Record proof for mutating, long-running, or remote-device actions.
 
 If a shell needs an app-specific scheme such as `soty://`, pass it as a
 `kernelIntentSchemes` value and resolve it through that shell's trusted proxy

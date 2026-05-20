@@ -14,7 +14,8 @@ export const appSurfaceKnownCapabilities = [
   "job.status",
   "job.stop",
   "context.refresh",
-  "close"
+  "window.collapse",
+  "window.resize"
 ] as const;
 
 export type AppSurfaceKnownCapability = (typeof appSurfaceKnownCapabilities)[number];
@@ -30,6 +31,16 @@ export const appSurfaceInstallScopes = ["account", "chat", "device"] as const;
 
 export type AppSurfaceInstallScope = (typeof appSurfaceInstallScopes)[number];
 
+export const appSurfaceWindowLayouts = ["half", "compact", "large", "full", "floating"] as const;
+
+export type AppSurfaceWindowLayout = (typeof appSurfaceWindowLayouts)[number];
+
+export interface AppSurfaceDisplay {
+  readonly layout: AppSurfaceWindowLayout;
+  readonly width?: string;
+  readonly height?: string;
+}
+
 export interface AppSurfaceConnectionIntent {
   readonly mode: AppSurfaceConnectionMode;
   readonly target?: string;
@@ -44,6 +55,7 @@ export interface AppSurfaceDefinition {
   readonly inlineHtml?: string;
   readonly capabilities: readonly string[];
   readonly summary?: string;
+  readonly display?: AppSurfaceDisplay;
   readonly connect?: AppSurfaceConnectionIntent;
 }
 
@@ -210,6 +222,7 @@ export function normalizeAppSurfaceInstallRequest(input: unknown, options: AppSu
   const summary = normalizeDisplayText(recordString(source, "summary"), 180);
   const targetDeviceId = normalizeTargetId(recordString(input, "targetDeviceId") || recordString(source, "targetDeviceId"));
   const revision = normalizeRevision(recordString(input, "revision") || recordString(source, "revision"));
+  const display = normalizeAppSurfaceDisplay(source);
   const connect = normalizeAppSurfaceConnect(source.connect);
   return {
     schema: appSurfaceInstallSchema,
@@ -220,6 +233,7 @@ export function normalizeAppSurfaceInstallRequest(input: unknown, options: AppSu
       ...(inlineHtml ? { inlineHtml } : {}),
       capabilities,
       ...(summary ? { summary } : {}),
+      display,
       ...(connect ? { connect } : {})
     },
     scope,
@@ -292,6 +306,52 @@ function normalizeAppSurfaceInstallScope(value: string): AppSurfaceInstallScope 
   return appSurfaceInstallScopes.includes(clean as AppSurfaceInstallScope)
     ? clean as AppSurfaceInstallScope
     : "account";
+}
+
+function normalizeAppSurfaceDisplay(source: Record<string, unknown>): AppSurfaceDisplay {
+  const displaySource = isRecord(source.display) ? source.display : source;
+  const layout = normalizeAppSurfaceWindowLayout(
+    recordString(displaySource, "layout")
+      || recordString(displaySource, "windowLayout")
+      || recordString(displaySource, "mode")
+  );
+  const width = normalizeCssSize(recordString(displaySource, "width"));
+  const height = normalizeCssSize(recordString(displaySource, "height"));
+  return {
+    layout,
+    ...(width ? { width } : {}),
+    ...(height ? { height } : {})
+  };
+}
+
+function normalizeAppSurfaceWindowLayout(value: string): AppSurfaceWindowLayout {
+  const clean = String(value || "").trim().toLowerCase().replace(/[_\s]+/gu, "-");
+  if (clean === "fullscreen" || clean === "full-screen") {
+    return "full";
+  }
+  if (clean === "small" || clean === "mini") {
+    return "compact";
+  }
+  if (clean === "bottom" || clean === "bottom-half" || clean === "default") {
+    return "half";
+  }
+  return appSurfaceWindowLayouts.includes(clean as AppSurfaceWindowLayout)
+    ? clean as AppSurfaceWindowLayout
+    : "half";
+}
+
+function normalizeCssSize(value: string): string {
+  const clean = String(value || "").trim().slice(0, 80);
+  if (!clean) {
+    return "";
+  }
+  if (/[{};<>@'"]/u.test(clean) || /url\s*\(/iu.test(clean)) {
+    return "";
+  }
+  if (/^(?:\d+(?:\.\d+)?(?:px|rem|em|%|vh|vw|svh|svw|dvh|dvw)|(?:clamp|min|max|calc)\([A-Za-z0-9_.,+\-*/%() \t]+\))$/u.test(clean)) {
+    return clean;
+  }
+  return "";
 }
 
 function normalizeAppSurfaceConnect(value: unknown): AppSurfaceConnectionIntent | undefined {

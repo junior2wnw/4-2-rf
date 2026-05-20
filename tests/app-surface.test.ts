@@ -88,6 +88,7 @@ test("app surface install requests produce scoped open plans", () => {
     summary: "Fast account helper",
     url: "/mini-apps/account-tool/index.html",
     capabilities: ["chat.append", "terminal.run", "chat.append"],
+    display: { layout: "large", height: "clamp(360px, 64svh, 820px)" },
     scope: "account",
     open: true,
     revision: "rev-1"
@@ -103,6 +104,8 @@ test("app surface install requests produce scoped open plans", () => {
   assert.equal(plan.scope, "account");
   assert.equal(plan.open, true);
   assert.equal(plan.mode, "same-origin");
+  assert.equal(plan.definition.display?.layout, "large");
+  assert.equal(plan.definition.display?.height, "clamp(360px, 64svh, 820px)");
   assert.equal(plan.installedAt, "2026-05-20T00:00:00.000Z");
 });
 
@@ -121,6 +124,7 @@ test("app surface install requests support bounded inline bundles", () => {
   assert.equal(plan.mode, "inline");
   assert.equal(plan.definition.url, "about:srcdoc");
   assert.equal(plan.definition.inlineHtml?.includes("<button>ok</button>"), true);
+  assert.equal(plan.definition.display?.layout, "half");
 
   assert.throws(
     () => normalizeAppSurfaceInstallRequest({
@@ -131,6 +135,24 @@ test("app surface install requests support bounded inline bundles", () => {
     }, { baseUrl }),
     /Inline/
   );
+});
+
+test("app surface display hints normalize shell window layout", () => {
+  const plan = normalizeAppSurfaceInstallRequest({
+    id: "floating-appka",
+    title: "Floating Appka",
+    html: "<!doctype html><main>ok</main>",
+    layout: "full-screen",
+    width: "min(92vw, 980px)",
+    height: "calc(100svh - 48px)"
+  }, {
+    baseUrl,
+    allowInlineHtml: true
+  });
+
+  assert.equal(plan.definition.display?.layout, "full");
+  assert.equal(plan.definition.display?.width, "min(92vw, 980px)");
+  assert.equal(plan.definition.display?.height, "calc(100svh - 48px)");
 });
 
 test("app surface install requests keep unsafe connector modes explicit", () => {
