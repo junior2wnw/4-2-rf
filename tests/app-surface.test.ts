@@ -106,6 +106,33 @@ test("app surface install requests produce scoped open plans", () => {
   assert.equal(plan.installedAt, "2026-05-20T00:00:00.000Z");
 });
 
+test("app surface install requests support bounded inline bundles", () => {
+  const plan = normalizeAppSurfaceInstallRequest({
+    id: "appka",
+    title: "Appka",
+    inlineHtml: "<!doctype html><button>ok</button>",
+    capabilities: ["chat.append"],
+    open: true
+  }, {
+    baseUrl,
+    allowInlineHtml: true
+  });
+
+  assert.equal(plan.mode, "inline");
+  assert.equal(plan.definition.url, "about:srcdoc");
+  assert.equal(plan.definition.inlineHtml?.includes("<button>ok</button>"), true);
+
+  assert.throws(
+    () => normalizeAppSurfaceInstallRequest({
+      id: "appka",
+      title: "Appka",
+      inlineHtml: "<!doctype html><button>ok</button>",
+      capabilities: ["chat.append"]
+    }, { baseUrl }),
+    /Inline/
+  );
+});
+
 test("app surface install requests keep unsafe connector modes explicit", () => {
   const remote = normalizeAppSurfaceInstallRequest({
     app: {

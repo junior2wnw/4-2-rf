@@ -30,6 +30,27 @@ gating, and visual layout stay in the application shell.
 
 ## Hosting Modes
 
+### Inline
+
+The surface is a tiny generated bundle stored by the shell and opened with a
+sandboxed inline frame. This is useful for user-requested helpers that need to
+appear in the current chat on every device without a domain or deploy server.
+
+```ts
+normalizeAppSurfaceInstallRequest({
+  id: "appka",
+  title: "Appka",
+  inlineHtml: "<!doctype html><button>ok</button>",
+  capabilities: ["chat.append"]
+}, {
+  baseUrl: "https://example.test",
+  allowInlineHtml: true
+});
+```
+
+Result: `mode: "inline"`, `url: "about:srcdoc"`. The shell should sandbox
+the frame, bind messages to a nonce, and cap bundle size.
+
 ### Same-origin
 
 The surface is bundled with the application shell and served from the same
@@ -123,6 +144,7 @@ normalizeAppSurfaceInstallRequest({
   id: "account-console",
   title: "Account Console",
   url: "/apps/account-console/index.html",
+  // Or inlineHtml for a small generated app.
   scope: "account",
   open: true,
   capabilities: ["chat.append", "terminal.run"]

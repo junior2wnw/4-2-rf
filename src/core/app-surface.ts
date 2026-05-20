@@ -20,6 +20,7 @@ export const appSurfaceKnownCapabilities = [
 export type AppSurfaceKnownCapability = (typeof appSurfaceKnownCapabilities)[number];
 
 export type AppSurfaceConnectionMode =
+  | "inline"
   | "same-origin"
   | "remote-origin"
   | "device-local"
@@ -40,6 +41,7 @@ export interface AppSurfaceDefinition {
   readonly id: string;
   readonly title: string;
   readonly url: string;
+  readonly inlineHtml?: string;
   readonly capabilities: readonly string[];
   readonly summary?: string;
   readonly connect?: AppSurfaceConnectionIntent;
@@ -69,7 +71,9 @@ export interface AppSurfaceUrlOptions {
 export interface AppSurfaceInstallOptions extends AppSurfaceUrlOptions {
   readonly allowedScopes?: readonly AppSurfaceInstallScope[];
   readonly allowKernelProxy?: boolean;
+  readonly allowInlineHtml?: boolean;
   readonly maximumCapabilities?: number;
+  readonly maximumInlineHtmlBytes?: number;
   readonly now?: string;
 }
 
@@ -183,6 +187,7 @@ export function normalizeAppSurfaceInstallRequest(input: unknown, options: AppSu
   const id = normalizeAppSurfaceId(recordString(source, "id"));
   const title = normalizeDisplayText(recordString(source, "title") || id, 80);
   const rawUrl = recordString(source, "url");
+  const inlineHtml = normalizeInlineHtml(recordString(source, "inlineHtml") || recordString(source, "html"), options);
   const capabilities = normalizeAppSurfaceCapabilities(source.capabilities, options.maximumCapabilities ?? 40);
   const scope = normalizeAppSurfaceInstallScope(recordString(input, "scope") || recordString(source, "scope") || "account");
   const allowedScopes = new Set(options.allowedScopes ?? appSurfaceInstallScopes);
@@ -192,7 +197,13 @@ export function normalizeAppSurfaceInstallRequest(input: unknown, options: AppSu
   if (!allowedScopes.has(scope)) {
     throw new Error(`App surface scope is rejected: ${scope}`);
   }
-  const resolved = resolveAppSurfaceUrl(rawUrl, options);
+  const resolved = inlineHtml
+    ? {
+      url: "about:srcdoc",
+      mode: "inline" as const,
+      requiresKernelProxy: false
+    }
+    : resolveAppSurfaceUrl(rawUrl, options);
   if (resolved.requiresKernelProxy && options.allowKernelProxy !== true) {
     throw new Error("App surface kernel proxy requires shell support");
   }
@@ -206,6 +217,7 @@ export function normalizeAppSurfaceInstallRequest(input: unknown, options: AppSu
       id,
       title,
       url: resolved.url,
+      ...(inlineHtml ? { inlineHtml } : {}),
       capabilities,
       ...(summary ? { summary } : {}),
       ...(connect ? { connect } : {})
@@ -287,7 +299,7 @@ function normalizeAppSurfaceConnect(value: unknown): AppSurfaceConnectionIntent 
     return undefined;
   }
   const mode = recordString(value, "mode");
-  if (!["same-origin", "remote-origin", "device-local", "kernel-proxy"].includes(mode)) {
+  if (!["inline", "same-origin", "remote-origin", "device-local", "kernel-proxy"].includes(mode)) {
     return undefined;
   }
   const target = normalizeTargetId(recordString(value, "target"));
@@ -299,6 +311,21 @@ function normalizeAppSurfaceConnect(value: unknown): AppSurfaceConnectionIntent 
     ...(path ? { path } : {}),
     ...(origin ? { origin } : {})
   };
+}
+
+function normalizeInlineHtml(value: string, options: AppSurfaceInstallOptions): string {
+  const html = String(value || "").trim();
+  if (!html) {
+    return "";
+  }
+  if (options.allowInlineHtml !== true) {
+    throw new Error("Inline app surface requires allowInlineHtml");
+  }
+  const maxBytes = Math.max(1024, Math.min(options.maximumInlineHtmlBytes ?? 300_000, 1_000_000));
+  if (new TextEncoder().encode(html).byteLength > maxBytes) {
+    throw new Error("Inline app surface is too large");
+  }
+  return html;
 }
 
 function normalizeDisplayText(value: string, maxLength: number): string {
