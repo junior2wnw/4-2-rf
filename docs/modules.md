@@ -61,6 +61,14 @@ their connection mode (`same-origin`, `remote-origin`, `device-local`, or
 derives capability permission strings. Shells still own catalogs,
 buttons, layout, and concrete browser/native bridge code.
 
+## Agent Runtime
+
+Agent runtime is the installed local capability host for trusted devices. The
+kernel describes capability families, risk, confirmation, durable job states,
+proof, and permission strings. Device agents and shells provide concrete
+adapters for operating systems, apps, local APIs, browser sessions, transaction
+flows, and other host programs.
+
 ## Reliability Primitives
 
 These modules stay in the kernel because they are technology primitives rather

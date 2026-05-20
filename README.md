@@ -12,6 +12,7 @@ pairing
 permissions
 encrypted session
 opaque byte envelope
+agent runtime
 ```
 
 Everything else connects through ports.
@@ -28,6 +29,7 @@ Inside the kernel:
 - encrypted frame codec
 - room secrets and compact join codes
 - opaque byte envelopes
+- installed-agent runtime contracts for local capability adapters
 - app-surface connection contracts for domain, device-local, and kernel-proxy UI
 - pairwise link spaces
 - path ranking, discovery metadata, recovery plans, and rate limits
@@ -72,6 +74,10 @@ updates, commands, telemetry, or any other format.
 App surfaces are frontend tools that attach to a trusted link without receiving
 raw device authority. See `docs/app-surfaces.md` for same-origin, remote-origin,
 device-local, and kernel-proxy routes.
+
+Agent runtime is the installed local capability host for a trusted device. See
+`docs/agent-runtime.md` for capability families, durable jobs, transaction
+flows, risk, confirmation, and proof.
 
 ## Payload Rule
 

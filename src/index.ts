@@ -1,4 +1,5 @@
 export * from "./core/abuse-protection.js";
+export * from "./core/agent-runtime.js";
 export * from "./core/app-surface.js";
 export * from "./core/audit.js";
 export * from "./core/crypto.js";
