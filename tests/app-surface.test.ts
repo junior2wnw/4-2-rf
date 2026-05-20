@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import {
   appSurfaceAllowedOrigin,
   appSurfaceFrameSources,
+  appSurfaceInstallSchema,
   appSurfacePermission,
   assertAppSurfaceCapabilities,
   normalizeAppSurfaceId,
+  normalizeAppSurfaceInstallRequest,
   resolveAppSurfaceUrl
 } from "../src/index.js";
 
@@ -77,4 +79,56 @@ test("app surface helpers extract frame sources and permission names", () => {
   assert.doesNotThrow(() => assertAppSurfaceCapabilities(["chat.append", "terminal.run"]));
   assert.throws(() => assertAppSurfaceCapabilities(["bad name"]), /Invalid/);
   assert.equal(appSurfacePermission("Remote Console", "terminal.run"), "app.call:remote-console/terminal.run");
+});
+
+test("app surface install requests produce scoped open plans", () => {
+  const plan = normalizeAppSurfaceInstallRequest({
+    id: " Account Tool ",
+    title: "Account Tool",
+    summary: "Fast account helper",
+    url: "/mini-apps/account-tool/index.html",
+    capabilities: ["chat.append", "terminal.run", "chat.append"],
+    scope: "account",
+    open: true,
+    revision: "rev-1"
+  }, {
+    baseUrl,
+    now: "2026-05-20T00:00:00.000Z"
+  });
+
+  assert.equal(plan.schema, appSurfaceInstallSchema);
+  assert.equal(plan.definition.id, "account-tool");
+  assert.equal(plan.definition.url, "https://soty.example/mini-apps/account-tool/index.html");
+  assert.deepEqual(plan.definition.capabilities, ["chat.append", "terminal.run"]);
+  assert.equal(plan.scope, "account");
+  assert.equal(plan.open, true);
+  assert.equal(plan.mode, "same-origin");
+  assert.equal(plan.installedAt, "2026-05-20T00:00:00.000Z");
+});
+
+test("app surface install requests keep unsafe connector modes explicit", () => {
+  const remote = normalizeAppSurfaceInstallRequest({
+    app: {
+      id: "remote-tool",
+      title: "Remote Tool",
+      url: "https://tools.example/ui/",
+      capabilities: ["context.refresh"]
+    },
+    scope: "chat",
+    targetDeviceId: "device-1"
+  }, { baseUrl });
+
+  assert.equal(remote.scope, "chat");
+  assert.equal(remote.targetDeviceId, "device-1");
+  assert.equal(remote.frameSrc, "https://tools.example");
+
+  assert.throws(
+    () => normalizeAppSurfaceInstallRequest({
+      id: "proxy-tool",
+      title: "Proxy Tool",
+      url: "trustlink://surface/proxy-tool",
+      capabilities: ["context.refresh"]
+    }, { baseUrl }),
+    /kernel proxy/
+  );
 });

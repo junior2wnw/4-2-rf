@@ -1,6 +1,7 @@
 export const appSurfaceManifestSchema = "trustlink.app-surfaces.v1";
 export const appSurfaceBridgeSchema = "trustlink.app-surface.bridge.v1";
 export const appSurfaceContextSchema = "trustlink.app-surface.context.v1";
+export const appSurfaceInstallSchema = "trustlink.app-surface.install.v1";
 
 export const appSurfaceKnownCapabilities = [
   "chat.append",
@@ -24,6 +25,10 @@ export type AppSurfaceConnectionMode =
   | "device-local"
   | "kernel-proxy";
 
+export const appSurfaceInstallScopes = ["account", "chat", "device"] as const;
+
+export type AppSurfaceInstallScope = (typeof appSurfaceInstallScopes)[number];
+
 export interface AppSurfaceConnectionIntent {
   readonly mode: AppSurfaceConnectionMode;
   readonly target?: string;
@@ -40,12 +45,32 @@ export interface AppSurfaceDefinition {
   readonly connect?: AppSurfaceConnectionIntent;
 }
 
+export interface AppSurfaceInstallPlan {
+  readonly schema: typeof appSurfaceInstallSchema;
+  readonly definition: AppSurfaceDefinition;
+  readonly scope: AppSurfaceInstallScope;
+  readonly targetDeviceId?: string;
+  readonly open: boolean;
+  readonly mode: AppSurfaceConnectionMode;
+  readonly frameSrc?: string;
+  readonly requiresKernelProxy: boolean;
+  readonly revision?: string;
+  readonly installedAt: string;
+}
+
 export interface AppSurfaceUrlOptions {
   readonly baseUrl: string;
   readonly allowLoopbackHttp?: boolean;
   readonly allowTrustedHttps?: boolean;
   readonly allowedOrigins?: readonly string[];
   readonly kernelIntentSchemes?: readonly string[];
+}
+
+export interface AppSurfaceInstallOptions extends AppSurfaceUrlOptions {
+  readonly allowedScopes?: readonly AppSurfaceInstallScope[];
+  readonly allowKernelProxy?: boolean;
+  readonly maximumCapabilities?: number;
+  readonly now?: string;
 }
 
 export interface AppSurfaceResolvedUrl {
@@ -150,6 +175,52 @@ export function assertAppSurfaceCapabilities(capabilities: readonly string[], ma
   }
 }
 
+export function normalizeAppSurfaceInstallRequest(input: unknown, options: AppSurfaceInstallOptions): AppSurfaceInstallPlan {
+  if (!isRecord(input)) {
+    throw new Error("App surface install request is required");
+  }
+  const source = isRecord(input.app) ? input.app : input;
+  const id = normalizeAppSurfaceId(recordString(source, "id"));
+  const title = normalizeDisplayText(recordString(source, "title") || id, 80);
+  const rawUrl = recordString(source, "url");
+  const capabilities = normalizeAppSurfaceCapabilities(source.capabilities, options.maximumCapabilities ?? 40);
+  const scope = normalizeAppSurfaceInstallScope(recordString(input, "scope") || recordString(source, "scope") || "account");
+  const allowedScopes = new Set(options.allowedScopes ?? appSurfaceInstallScopes);
+  if (!id || !title) {
+    throw new Error("App surface id and title are required");
+  }
+  if (!allowedScopes.has(scope)) {
+    throw new Error(`App surface scope is rejected: ${scope}`);
+  }
+  const resolved = resolveAppSurfaceUrl(rawUrl, options);
+  if (resolved.requiresKernelProxy && options.allowKernelProxy !== true) {
+    throw new Error("App surface kernel proxy requires shell support");
+  }
+  const summary = normalizeDisplayText(recordString(source, "summary"), 180);
+  const targetDeviceId = normalizeTargetId(recordString(input, "targetDeviceId") || recordString(source, "targetDeviceId"));
+  const revision = normalizeRevision(recordString(input, "revision") || recordString(source, "revision"));
+  const connect = normalizeAppSurfaceConnect(source.connect);
+  return {
+    schema: appSurfaceInstallSchema,
+    definition: {
+      id,
+      title,
+      url: resolved.url,
+      capabilities,
+      ...(summary ? { summary } : {}),
+      ...(connect ? { connect } : {})
+    },
+    scope,
+    ...(targetDeviceId ? { targetDeviceId } : {}),
+    open: input.open === true || source.open === true,
+    mode: resolved.mode,
+    ...(resolved.frameSrc ? { frameSrc: resolved.frameSrc } : {}),
+    requiresKernelProxy: resolved.requiresKernelProxy,
+    ...(revision ? { revision } : {}),
+    installedAt: normalizeIsoTime(options.now) || new Date().toISOString()
+  };
+}
+
 export function appSurfacePermission(appId: string, capability: string): string {
   const cleanId = normalizeAppSurfaceId(appId);
   if (!cleanId || !isCapabilityName(capability)) {
@@ -185,6 +256,87 @@ function isDeviceLocalHost(hostname: string): boolean {
     return second >= 16 && second <= 31;
   }
   return host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:");
+}
+
+function normalizeAppSurfaceCapabilities(value: unknown, maximum: number): string[] {
+  const rawItems = Array.isArray(value) ? value : [];
+  const result: string[] = [];
+  for (const item of rawItems) {
+    if (typeof item !== "string") {
+      continue;
+    }
+    const capability = item.trim().toLowerCase();
+    if (!capability || result.includes(capability)) {
+      continue;
+    }
+    result.push(capability);
+  }
+  assertAppSurfaceCapabilities(result, maximum);
+  return result;
+}
+
+function normalizeAppSurfaceInstallScope(value: string): AppSurfaceInstallScope {
+  const clean = String(value || "").trim().toLowerCase();
+  return appSurfaceInstallScopes.includes(clean as AppSurfaceInstallScope)
+    ? clean as AppSurfaceInstallScope
+    : "account";
+}
+
+function normalizeAppSurfaceConnect(value: unknown): AppSurfaceConnectionIntent | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const mode = recordString(value, "mode");
+  if (!["same-origin", "remote-origin", "device-local", "kernel-proxy"].includes(mode)) {
+    return undefined;
+  }
+  const target = normalizeTargetId(recordString(value, "target"));
+  const path = normalizeDisplayText(recordString(value, "path"), 180);
+  const origin = normalizeDisplayText(recordString(value, "origin"), 180);
+  return {
+    mode: mode as AppSurfaceConnectionMode,
+    ...(target ? { target } : {}),
+    ...(path ? { path } : {}),
+    ...(origin ? { origin } : {})
+  };
+}
+
+function normalizeDisplayText(value: string, maxLength: number): string {
+  return String(value || "")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function normalizeTargetId(value: string): string {
+  return String(value || "")
+    .trim()
+    .replace(/[^A-Za-z0-9._:-]+/gu, "")
+    .slice(0, 180);
+}
+
+function normalizeRevision(value: string): string {
+  return String(value || "")
+    .trim()
+    .replace(/[^A-Za-z0-9._:-]+/gu, "")
+    .slice(0, 80);
+}
+
+function normalizeIsoTime(value: string | undefined): string {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : "";
+}
+
+function recordString(value: Record<string, unknown>, key: string): string {
+  const item = value[key];
+  return typeof item === "string" ? item : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isCapabilityName(value: string): boolean {

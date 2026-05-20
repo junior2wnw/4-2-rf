@@ -13,6 +13,7 @@ export const agentRuntimeCapabilityFamilies = [
   "mouse",
   "clipboard",
   "network",
+  "surface",
   "app",
   "api",
   "job",
@@ -120,7 +121,7 @@ export function agentRuntimeRiskForCapability(capability: string, mutates = fals
   if (/^(transaction\.(submit|send|commit|approve|cancel)|os\.(reinstall|reset|wipe|partition)|filesystem\.(delete|wipe)|device\.(poweroff|reboot))/u.test(clean)) {
     return "critical";
   }
-  if (/^(app\.(write|click|type|submit)|api\.(post|put|delete|submit)|service\.(start|stop|restart)|package\.(install|remove|upgrade)|filesystem\.(write|move|copy)|browser\.(submit|download)|desktop\.(click|type)|keyboard\.send|mouse\.click)/u.test(clean)) {
+  if (/^(surface\.(build|serve|install|open|update|remove)|app\.(write|click|type|submit)|api\.(post|put|delete|submit)|service\.(start|stop|restart)|package\.(install|remove|upgrade)|filesystem\.(write|move|copy)|browser\.(submit|download)|desktop\.(click|type)|keyboard\.send|mouse\.click)/u.test(clean)) {
     return "high";
   }
   if (mutates) {
@@ -150,6 +151,7 @@ export function defaultAgentRuntimeCapabilities(): AgentRuntimeCapability[] {
     ["mouse", ["move", "click"], "high"],
     ["clipboard", ["read", "write"], "medium"],
     ["network", ["status", "probe"], "low"],
+    ["surface", ["build", "serve", "install", "open", "update", "remove"], "high"],
     ["app", ["discover", "launch", "focus", "connect", "read", "write", "submit"], "high"],
     ["api", ["get", "post", "put", "delete", "submit"], "high"],
     ["job", ["start", "status", "stop"], "medium"],
@@ -188,6 +190,9 @@ function assertCapability(capability: AgentRuntimeCapability): void {
 function proofForFamily(family: string): string[] {
   if (family === "transaction") {
     return ["preparedActionId", "visiblePreview", "confirmation", "result"];
+  }
+  if (family === "surface") {
+    return ["appId", "origin", "scope", "result"];
   }
   if (family === "app" || family === "browser" || family === "desktop") {
     return ["target", "stateBefore", "stateAfter", "result"];

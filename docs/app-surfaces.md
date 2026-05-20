@@ -111,6 +111,31 @@ classification, frame-source extraction, and permission strings. Concrete
 message transport remains an adapter because browsers, native apps, embedded
 hosts, and server shells expose different bridge APIs.
 
+## Install And Open Request
+
+An agent or shell can ask for a surface to appear in an account, chat, or
+device scope with one small request. The kernel normalizes ids, checks
+capability names, classifies the URL, and returns the exact frame origin a
+shell must allow.
+
+```ts
+normalizeAppSurfaceInstallRequest({
+  id: "account-console",
+  title: "Account Console",
+  url: "/apps/account-console/index.html",
+  scope: "account",
+  open: true,
+  capabilities: ["chat.append", "terminal.run"]
+}, {
+  baseUrl: "https://example.test"
+});
+```
+
+Use `allowKernelProxy: true` only after the shell has a same-origin proxy or
+tunnel for intent URLs such as `trustlink://surface/...`. Until then, those
+requests stay rejected so a generated app cannot iframe a raw device secret or
+private service by accident.
+
 ## Adapter Checklist
 
 An application shell that supports app surfaces should:

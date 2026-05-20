@@ -21,6 +21,7 @@ test("agent runtime normalizes ids and permissions", () => {
 
 test("agent runtime risk model protects transaction and os actions", () => {
   assert.equal(agentRuntimeRiskForCapability("screen.capture"), "low");
+  assert.equal(agentRuntimeRiskForCapability("surface.install"), "high");
   assert.equal(agentRuntimeRiskForCapability("filesystem.write"), "high");
   assert.equal(agentRuntimeRiskForCapability("transaction.submit"), "critical");
   assert.equal(agentRuntimeRiskForCapability("os.reinstall"), "critical");
@@ -42,6 +43,7 @@ test("agent runtime manifest is small and adapter neutral", () => {
   assert.equal(manifest.proofModel, "structured-proof");
   assert.equal(manifest.adapterModel, "capability-adapters");
   assert.equal(manifest.capabilities.some((item) => item.family === "app"), true);
+  assert.equal(manifest.capabilities.some((item) => item.family === "surface"), true);
   assert.equal(manifest.capabilities.some((item) => item.family === "transaction"), true);
   assert.equal(manifest.capabilities.some((item) => item.family === "os"), true);
 });

@@ -27,6 +27,7 @@ The generic families are intentionally broad:
 - `mouse`
 - `clipboard`
 - `network`
+- `surface`
 - `app`
 - `api`
 - `job`
@@ -39,6 +40,11 @@ The generic families are intentionally broad:
 Adapters can map these families to PowerShell, AppleScript, xdotool, browser
 DevTools, local APIs, app SDKs, broker terminals, CRM clients, IDEs, media
 tools, installers, or any other host program.
+
+`surface.*` covers agent-created frontend helpers: build, serve, install, open,
+update, and remove. Pair it with the app-surface install request so the runtime
+can prepare the bundle while the shell still owns account scope, frame policy,
+bridge grants, and proof.
 
 ## Transaction Work
 
