@@ -28,6 +28,7 @@ Inside the kernel:
 - encrypted frame codec
 - room secrets and compact join codes
 - opaque byte envelopes
+- app-surface connection contracts for domain, device-local, and kernel-proxy UI
 - pairwise link spaces
 - path ranking, discovery metadata, recovery plans, and rate limits
 - crypto, transport, and storage ports
@@ -67,6 +68,10 @@ import {
 open an encrypted room secret and encrypt arbitrary byte arrays. The kernel
 treats those bytes as opaque regardless of whether they are text, files, CRDT
 updates, commands, telemetry, or any other format.
+
+App surfaces are frontend tools that attach to a trusted link without receiving
+raw device authority. See `docs/app-surfaces.md` for same-origin, remote-origin,
+device-local, and kernel-proxy routes.
 
 ## Payload Rule
 

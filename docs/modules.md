@@ -52,6 +52,15 @@ The kernel stays generic by treating those scenarios as permissions plus bytes:
 `text.send`, `file.read:/path`, `api.call:/method`, `device.control:screen`,
 or any namespace an adapter defines.
 
+## App Surfaces
+
+App surfaces are UI adapters over trusted links: mini apps, command panels,
+embedded tools, widgets, and remote frontends. The kernel classifies
+their connection mode (`same-origin`, `remote-origin`, `device-local`, or
+`kernel-proxy`), normalizes ids, validates origins, extracts frame sources, and
+derives capability permission strings. Shells still own catalogs,
+buttons, layout, and concrete browser/native bridge code.
+
 ## Reliability Primitives
 
 These modules stay in the kernel because they are technology primitives rather
