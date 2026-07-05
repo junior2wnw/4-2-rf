@@ -44,6 +44,7 @@ test("agent runtime manifest is small and adapter neutral", () => {
   assert.equal(manifest.adapterModel, "capability-adapters");
   assert.equal(manifest.capabilities.some((item) => item.family === "app"), true);
   assert.equal(manifest.capabilities.some((item) => item.family === "surface"), true);
+  assert.equal(manifest.capabilities.some((item) => item.family === "traffic"), true);
   assert.equal(manifest.capabilities.some((item) => item.family === "transaction"), true);
   assert.equal(manifest.capabilities.some((item) => item.family === "os"), true);
 });

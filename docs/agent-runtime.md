@@ -27,6 +27,7 @@ The generic families are intentionally broad:
 - `mouse`
 - `clipboard`
 - `network`
+- `traffic`
 - `surface`
 - `app`
 - `api`
@@ -40,6 +41,13 @@ The generic families are intentionally broad:
 Adapters can map these families to PowerShell, AppleScript, xdotool, browser
 DevTools, local APIs, app SDKs, broker terminals, CRM clients, IDEs, media
 tools, installers, or any other host program.
+
+`traffic.*` covers explicit Link Traffic grants. The kernel owns the generic
+capability names (`traffic.exit`, `traffic.proxy`, `traffic.system`), target
+shape, mode normalization, risk, confirmation, and proof fields. A concrete
+agent may implement this as a bounded fetch proxy, a SOCKS/CONNECT adapter, or a
+machine-scope route helper; the shell still owns the visible consent switch and
+the adapter still owns packets, sockets, and OS integration.
 
 `surface.*` covers agent-created frontend helpers: build, serve, install, open,
 update, and remove. Pair it with the app-surface install request so the runtime

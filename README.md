@@ -13,6 +13,7 @@ permissions
 encrypted session
 opaque byte envelope
 agent runtime
+link traffic
 ```
 
 Everything else connects through ports.
@@ -30,6 +31,7 @@ Inside the kernel:
 - room secrets and compact join codes
 - opaque byte envelopes
 - installed-agent runtime contracts for local capability adapters
+- explicit link-traffic grants, targets, modes, and adapter-neutral policy
 - app-surface connection contracts for domain, device-local, and kernel-proxy UI
 - pairwise link spaces
 - path ranking, discovery metadata, recovery plans, and rate limits
@@ -76,8 +78,8 @@ raw device authority. See `docs/app-surfaces.md` for same-origin, remote-origin,
 device-local, and kernel-proxy routes.
 
 Agent runtime is the installed local capability host for a trusted device. See
-`docs/agent-runtime.md` for capability families, durable jobs, transaction
-flows, risk, confirmation, and proof.
+`docs/agent-runtime.md` for capability families, durable jobs, traffic
+adapters, transaction flows, risk, confirmation, and proof.
 
 ## Payload Rule
 

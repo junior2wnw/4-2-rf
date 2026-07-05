@@ -69,6 +69,14 @@ proof, and permission strings. Device agents and shells provide concrete
 adapters for operating systems, apps, local APIs, browser sessions, transaction
 flows, and other host programs.
 
+## Link Traffic
+
+Link traffic is a permission and adapter contract for routing selected traffic
+through a trusted peer. The kernel keeps it generic: explicit grants, capability
+names, target shape, proxy/system modes, status, risk, and proof. Applications
+decide how to ask for consent, and agents decide whether the concrete adapter is
+a fetch proxy, a stream proxy, or a system route helper.
+
 ## Reliability Primitives
 
 These modules stay in the kernel because they are technology primitives rather

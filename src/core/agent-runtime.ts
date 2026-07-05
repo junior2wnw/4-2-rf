@@ -13,6 +13,7 @@ export const agentRuntimeCapabilityFamilies = [
   "mouse",
   "clipboard",
   "network",
+  "traffic",
   "surface",
   "app",
   "api",
@@ -121,7 +122,7 @@ export function agentRuntimeRiskForCapability(capability: string, mutates = fals
   if (/^(transaction\.(submit|send|commit|approve|cancel)|os\.(reinstall|reset|wipe|partition)|filesystem\.(delete|wipe)|device\.(poweroff|reboot))/u.test(clean)) {
     return "critical";
   }
-  if (/^(surface\.(build|serve|install|open|update|remove)|app\.(write|click|type|submit)|api\.(post|put|delete|submit)|service\.(start|stop|restart)|package\.(install|remove|upgrade)|filesystem\.(write|move|copy)|browser\.(submit|download)|desktop\.(click|type)|keyboard\.send|mouse\.click)/u.test(clean)) {
+  if (/^(surface\.(build|serve|install|open|update|remove)|app\.(write|click|type|submit)|api\.(post|put|delete|submit)|service\.(start|stop|restart)|package\.(install|remove|upgrade)|filesystem\.(write|move|copy)|browser\.(submit|download)|desktop\.(click|type)|keyboard\.send|mouse\.click|traffic\.(exit|proxy|system|share|use|stop))/u.test(clean)) {
     return "high";
   }
   if (mutates) {
@@ -134,7 +135,7 @@ export function agentRuntimeRequiresConfirmation(capability: string, risk = agen
   if (risk === "critical") {
     return true;
   }
-  return /^(transaction\.|os\.(reinstall|reset|wipe)|filesystem\.delete)/u.test(String(capability || "").toLowerCase());
+  return /^(transaction\.|os\.(reinstall|reset|wipe)|filesystem\.delete|traffic\.(exit|proxy|system|share|use|stop))/u.test(String(capability || "").toLowerCase());
 }
 
 export function defaultAgentRuntimeCapabilities(): AgentRuntimeCapability[] {
@@ -151,6 +152,7 @@ export function defaultAgentRuntimeCapabilities(): AgentRuntimeCapability[] {
     ["mouse", ["move", "click"], "high"],
     ["clipboard", ["read", "write"], "medium"],
     ["network", ["status", "probe"], "low"],
+    ["traffic", ["status", "share", "use", "stop"], "high", true],
     ["surface", ["build", "serve", "install", "open", "update", "remove"], "high"],
     ["app", ["discover", "launch", "focus", "connect", "read", "write", "submit"], "high"],
     ["api", ["get", "post", "put", "delete", "submit"], "high"],
@@ -193,6 +195,9 @@ function proofForFamily(family: string): string[] {
   }
   if (family === "surface") {
     return ["appId", "origin", "scope", "result"];
+  }
+  if (family === "traffic") {
+    return ["grant", "mode", "target", "status"];
   }
   if (family === "app" || family === "browser" || family === "desktop") {
     return ["target", "stateBefore", "stateAfter", "result"];

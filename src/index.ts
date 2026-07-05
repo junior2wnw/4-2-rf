@@ -8,6 +8,7 @@ export * from "./core/envelope.js";
 export * from "./core/frame.js";
 export * from "./core/identity.js";
 export * from "./core/link-space.js";
+export * from "./core/link-traffic.js";
 export * from "./core/path.js";
 export * from "./core/permissions.js";
 export * from "./core/recovery.js";
