@@ -4,13 +4,25 @@ import {
   LinkSpace,
   TrustStore,
   byteEnvelopePayload,
+  cleanTrustLabel,
+  createCompactJoinCode,
   createByteEnvelope,
+  createRoomAuth,
   createDeviceIdentity,
   createStateSyncPlan,
+  createTrustLinkRoom,
+  createWebJoinKeyPair,
+  createWebRoomAuth,
   establishTrustedSession,
+  exportWebJoinPublicKey,
   manualEndpoint,
+  openBytesWithRoomSecret,
+  openRoomSecretFromWebJoin,
+  parseCompactJoinCode,
   PermissionPolicy,
   rankPathCandidates,
+  sealBytesWithRoomSecret,
+  sealRoomSecretForWebJoin,
   StaticDiscoveryProvider,
   TokenBucket,
   toPublicIdentity
@@ -94,6 +106,37 @@ test("byte envelopes preserve format metadata without understanding payloads", (
 
   assert.equal(envelope.format, "yjs/update-v1");
   assert.equal(readUtf8(byteEnvelopePayload(envelope)), "opaque update");
+});
+
+test("room helpers keep join codes compact and app-neutral", async () => {
+  const room = createTrustLinkRoom({ label: "  Device   A  ", now: "2026-04-29T00:00:00.000Z" });
+  const code = createCompactJoinCode(room.id, room.label);
+  const parsed = parseCompactJoinCode(code);
+
+  assert.equal(room.label, "Device A");
+  assert.equal(cleanTrustLabel(""), ".");
+  assert.equal(parsed.roomId, room.id);
+  assert.equal(parsed.label, "Device A");
+  assert.equal(
+    await createRoomAuth(crypto, room, { namespace: "demo.room-auth.v1" }),
+    await createRoomAuth(crypto, { id: room.id, secret: room.secret }, { namespace: "demo.room-auth.v1" })
+  );
+});
+
+test("web crypto adapter pairs and opens room bytes", async () => {
+  const room = createTrustLinkRoom({ label: "browser" });
+  const requester = await createWebJoinKeyPair();
+  const accepted = await sealRoomSecretForWebJoin(
+    room.secret,
+    await exportWebJoinPublicKey(requester),
+    "host"
+  );
+  const openedSecret = await openRoomSecretFromWebJoin(requester.privateKey, accepted);
+  const sealed = await sealBytesWithRoomSecret(openedSecret, utf8("any bytes"));
+
+  assert.equal(openedSecret, room.secret);
+  assert.equal(readUtf8(await openBytesWithRoomSecret(room.secret, sealed.nonce, sealed.ciphertext)), "any bytes");
+  assert.equal(await createWebRoomAuth(room), await createWebRoomAuth({ id: room.id, secret: room.secret }));
 });
 
 test("path engine prefers local low-latency paths", () => {

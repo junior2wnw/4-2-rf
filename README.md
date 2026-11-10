@@ -25,6 +25,7 @@ Inside the kernel:
 - pairing invite serialization
 - session handshake
 - encrypted frames
+- room secrets and compact join codes
 - byte envelopes
 - link spaces
 - delivery and recovery metadata
@@ -37,6 +38,32 @@ Outside the kernel:
 - WebSocket, WebRTC, QUIC, BLE, USB, or LAN implementations
 - chat, files, RPC, CRDT, video, telemetry, and app protocols
 - IndexedDB, SQLite, Keychain, TPM, or cloud storage implementations
+
+## Module Shape
+
+The package is a small SDK. Applications call the kernel methods and attach
+their own UI, storage, and transport adapters around them.
+
+```ts
+import {
+  createCompactJoinCode,
+  createTrustLinkRoom,
+  parseCompactJoinCode
+} from "trustlink-kernel";
+import {
+  createWebJoinKeyPair,
+  exportWebJoinPublicKey,
+  openBytesWithRoomSecret,
+  sealBytesWithRoomSecret,
+  sealRoomSecretForWebJoin
+} from "trustlink-kernel/platform/web";
+```
+
+`createTrustLinkRoom` creates an opaque room id and secret.
+`createCompactJoinCode` produces the small QR payload. The web adapter can then
+open an encrypted room secret and encrypt arbitrary byte arrays. The kernel does
+not know whether those bytes are text, files, CRDT updates, commands, telemetry,
+or any other format.
 
 ## Payload Rule
 
@@ -75,7 +102,7 @@ import {
   establishTrustedSession,
   toPublicIdentity
 } from "trustlink-kernel";
-import { NodeTrustLinkCrypto } from "trustlink-kernel/dist/platform/node-crypto.js";
+import { NodeTrustLinkCrypto } from "trustlink-kernel/platform/node";
 
 const crypto = new NodeTrustLinkCrypto();
 const a = await createDeviceIdentity(crypto, "A");
