@@ -1,91 +1,130 @@
-# TrustLink Core
+# TrustLink Kernel
 
-TrustLink Core — простая и надёжная технология связи между доверенными устройствами.
+TrustLink Kernel is a small universal core for consent-based encrypted byte
+streams between trusted identities.
 
-Формула:
+It is not a chat framework, a file system, a PWA toolkit, or a transport
+library. It is the narrow layer that lets any product safely answer:
 
 ```text
-Найти → Спросить → Запомнить → Соединить → Передать → Восстановить
+Who am I?
+Who do I trust?
+Can we open a fresh encrypted session?
+Can I move these bytes with a delivery policy?
+Can I recover without changing the application format?
 ```
 
-Это личный цифровой мост: устройства связываются после явного согласия, запоминают ключи друг друга, получают только конкретные разрешения и восстанавливают связь при обрывах.
+Everything above that line is an adapter.
 
-## Что внутри
+## Kernel Boundary
 
-- Identity: устройство определяется Ed25519-ключом.
-- Trust: новое устройство всегда требует подтверждения.
-- Permissions: каждое действие получает отдельное разрешение.
-- Session: на каждое соединение создаются временные X25519-ключи.
-- Transport-ready core: любой transport подключается через открытый adapter id.
-- Envelope: один формат для любых каналов данных.
-- LinkSpace: один контекст связи может включать два, три и больше устройств через обычные pairwise-связи.
-- Recovery: состояние переживает обрыв, смену сети, сон устройства и повторное соединение.
-- Audit: логируются технические события без payload.
-- Modules: storage, discovery, transports, channels, UI and QR подключаются через единый registry.
+Inside the kernel:
 
-## Быстрый старт
+- device identity
+- public trust records
+- pairing invite serialization
+- session handshake
+- encrypted frames
+- byte envelopes
+- link spaces
+- delivery and recovery metadata
+- transport, storage, and crypto ports
+
+Outside the kernel:
+
+- UI
+- QR rendering
+- WebSocket, WebRTC, QUIC, BLE, USB, or LAN implementations
+- chat, files, RPC, CRDT, video, telemetry, and app protocols
+- IndexedDB, SQLite, Keychain, TPM, or cloud storage implementations
+
+## Payload Rule
+
+The kernel never interprets application payloads.
+
+```ts
+const envelope = createByteEnvelope({
+  streamId: "shared-doc",
+  seq: 1,
+  payload: bytes,
+  contentType: "application/octet-stream",
+  format: "yjs/update-v1"
+});
+```
+
+`format` and `contentType` are routing metadata for the application. The kernel
+only validates the envelope, encrypts bytes, opens bytes, and preserves delivery
+metadata.
+
+## Quick Start
 
 ```bash
 pnpm install
 pnpm check
 pnpm demo
-pnpm modules
-pnpm pair:qr
 pnpm doctor
 ```
 
-Демо создаёт два устройства, связывает их через согласие, выбирает лучший путь, шифрует сообщение, готовит передачу файла с resume и показывает recovery-план после обрыва. Это пример поверх технологии, а не обязательный сценарий.
-
-## Минимальный код
+Minimal Node example:
 
 ```ts
-import { LinkSpace, createDeviceIdentity, toPublicIdentity } from "trustlink-core";
+import {
+  TrustStore,
+  createByteEnvelope,
+  createDeviceIdentity,
+  establishTrustedSession,
+  toPublicIdentity
+} from "trustlink-kernel";
+import { NodeTrustLinkCrypto } from "trustlink-kernel/dist/platform/node-crypto.js";
 
-const a = createDeviceIdentity("Laptop");
-const b = createDeviceIdentity("Phone");
-const c = createDeviceIdentity("Tablet");
+const crypto = new NodeTrustLinkCrypto();
+const a = await createDeviceIdentity(crypto, "A");
+const b = await createDeviceIdentity(crypto, "B");
+const aTrust = TrustStore.empty();
+const bTrust = TrustStore.empty();
 
-const space = LinkSpace.create("My Link", toPublicIdentity(a), ["data.send"]);
+aTrust.addTrustedPeer(toPublicIdentity(b), ["stream.write"], {
+  accepted: true,
+  approvedBy: "A"
+});
+bTrust.addTrustedPeer(toPublicIdentity(a), ["stream.write"], {
+  accepted: true,
+  approvedBy: "B"
+});
 
-space.addMember(toPublicIdentity(b), ["data.send"]);
-space.addMember(toPublicIdentity(c), ["events.sync"]);
+const { initiatorSession, responderSession } = await establishTrustedSession(
+  crypto,
+  a,
+  aTrust,
+  b,
+  bTrust
+);
+
+const envelope = createByteEnvelope({
+  streamId: "any-stream",
+  seq: 1,
+  payload: new Uint8Array([1, 2, 3]),
+  format: "custom/binary"
+});
+
+const sealed = await initiatorSession.seal(
+  new TextEncoder().encode(JSON.stringify(envelope))
+);
+const opened = await responderSession.open(sealed);
 ```
 
-## Архитектура
+## Design Principles
 
-```text
-Identity
-→ Trust
-→ Discovery
-→ Path selection
-→ Session security
-→ Multiplexed envelope
-→ Permissions
-→ Delivery
-→ Recovery
-→ Audit
-```
+- The permanent identity key pins a device identity.
+- Pairing is explicit and creates a revocable trust record.
+- Every session uses fresh agreement keys.
+- Transports move sealed frames only.
+- Payloads are opaque bytes.
+- Delivery semantics are metadata, not app behavior.
+- Platform specifics are ports, not kernel dependencies.
 
-TrustLink реализует technology kernel, extension points и starter-модули. Реальные сетевые transports подключаются через тот же контракт и получают только encrypted frames.
+## Status
 
-## Позиционирование
-
-TrustLink Core описывается через пользу и границы ответственности:
-
-- простая и надёжная связь между своими доверенными устройствами;
-- связь между доверенными устройствами с подтверждением;
-- private device link;
-- точный доступ к своим сервисам;
-- связь через нестабильные сети.
-
-Подробности: [docs/security-and-legal.md](docs/security-and-legal.md).
-
-## Модульность
-
-TrustLink устроен как маленькое ядро с понятными extension points. Другие пользователи могут добавлять свои storage, discovery, transport, channel, UI и QR модули через общий `ModuleRegistry`. Starter-модули можно заменить полностью.
-
-Документ: [docs/modules.md](docs/modules.md).
-
-## Статус
-
-Это сильная основа. Перед использованием с реальными пользовательскими данными запланированы внешний аудит протокола, реальные transport adapters, хранение private key в OS keychain/TPM и threat-model review.
+This branch is the cleaned kernel shape. The included Node crypto provider is a
+reference adapter for tests, demos, and server-side usage. Browser, mobile, and
+hardware-backed providers should implement the same `TrustLinkCrypto` port.
